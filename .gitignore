@@ -1,0 +1,12 @@
+data/
+*.mp4
+*.avi
+*.mkv
+*.pt
+*.onnx
+*.safetensors
+*.ckpt
+.env
+__pycache__/
+venv/
+.venv/
