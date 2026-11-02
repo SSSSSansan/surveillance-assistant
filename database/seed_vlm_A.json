@@ -1,0 +1,63 @@
+{
+  "video_id": "test_video_01",
+  "camera_id": "test_cam01",
+  "source": "meva",
+  "events": [
+    {
+      "event_id": "e0004",
+      "event_type": "pick_up",
+      "track_id": 7,
+      "zone_id": "desk",
+      "t_start": 24.0,
+      "t_end": 26.0,
+      "trigger_score": 0.64,
+      "needs_vlm": true,
+      "clip_path": "clips/test_video_01_e0004.mp4",
+      "vlm_status": "confirmed",
+      "vlm_description": "A person standing at the desk picks up a small bag and holds it.",
+      "prompt_variant": "A"
+    },
+    {
+      "event_id": "e0010",
+      "event_type": "put_down",
+      "track_id": 8,
+      "zone_id": "desk",
+      "t_start": 70.5,
+      "t_end": 72.0,
+      "trigger_score": 0.58,
+      "needs_vlm": true,
+      "clip_path": "clips/test_video_01_e0010.mp4",
+      "vlm_status": "confirmed",
+      "vlm_description": "The person leans over the desk and places a laptop on it.",
+      "prompt_variant": "A"
+    },
+    {
+      "event_id": "e0013",
+      "event_type": "abandoned_object",
+      "track_id": 8,
+      "zone_id": "desk",
+      "t_start": 95.0,
+      "t_end": 120.0,
+      "trigger_score": 0.71,
+      "needs_vlm": true,
+      "clip_path": "clips/test_video_01_e0013.mp4",
+      "vlm_status": "confirmed",
+      "vlm_description": "A backpack stays on the desk with nobody nearby.",
+      "prompt_variant": "A"
+    },
+    {
+      "event_id": "e0018",
+      "event_type": "pick_up",
+      "track_id": 12,
+      "zone_id": "desk",
+      "t_start": 206.0,
+      "t_end": 207.5,
+      "trigger_score": 0.55,
+      "needs_vlm": true,
+      "clip_path": "clips/test_video_01_e0018.mp4",
+      "vlm_status": "rejected",
+      "vlm_description": "The person reaches toward the desk but no object is picked up.",
+      "prompt_variant": "A"
+    }
+  ]
+}
