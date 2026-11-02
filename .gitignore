@@ -10,3 +10,5 @@ data/
 __pycache__/
 venv/
 .venv/
+clips/
+runs/

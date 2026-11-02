@@ -1,0 +1,24 @@
+{
+  "video_id": "REPLACE_WITH_MEVA_FILE_NAME",
+  "camera_id": "REPLACE_WITH_MEVA_CAMERA",
+  "source": "meva",
+  "fps": 30.0,
+  "events": [
+    {
+      "event_id": "cv_0000",
+      "event_type": "pickup_or_put_candidate",
+      "track_id": 274,
+      "zone_id": "table",
+      "t_start": 22.9,
+      "t_end": 30.9,
+      "trigger_score": null,
+      "needs_vlm": true,
+      "clip_path": "clips/cv_0000.mp4",
+      "detected_by": "cv",
+      "vlm_status": "not_checked",
+      "vlm_event_type": null,
+      "vlm_description": null,
+      "prompt_variant": null
+    }
+  ]
+}
