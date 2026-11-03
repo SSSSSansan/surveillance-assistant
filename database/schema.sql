@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS events (
     event_id       TEXT NOT NULL,
     event_type     TEXT NOT NULL CHECK (event_type IN (
                        'enter','exit','approach_zone','leave_zone',
-                       'dwell_in_zone','pick_up','put_down','abandoned_object')),
+                       'dwell_in_zone','pick_up','put_down','abandoned_object',
+                       'pickup_or_put_candidate')),
     track_id       INTEGER,
     zone_id        TEXT,
     t_start        DOUBLE PRECISION NOT NULL CHECK (t_start >= 0),  -- секунды от начала видео

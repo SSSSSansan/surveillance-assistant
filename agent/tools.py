@@ -29,6 +29,7 @@ import re
 EVENT_TYPES = (
     "enter", "exit", "approach_zone", "leave_zone",
     "dwell_in_zone", "pick_up", "put_down", "abandoned_object",
+    "pickup_or_put_candidate",
 )
 VLM_VARIANTS = ("A", "B")
 # ВРЕМЕННОЕ ДОПУЩЕНИЕ: вариант "A" считается основным для ответов ассистента.
