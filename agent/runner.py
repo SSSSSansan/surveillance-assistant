@@ -25,6 +25,9 @@ Examples:
 - How many events did person 7 have? -> track_id=7
 - How many people approached the desk? -> event_type="approach_zone", zone_id="desk"
 If the question asks for all event types, omit event_type.
+If the user asks for multiple event types joined by "or" (for example, pick up or put down),
+make separate tool calls, one per exact event_type. Never invent a combined event_type.
+Use the exact schema spelling "pickup_or_put_candidate" (without "pick_up").
 
 2. query_events
 Use for questions asking whether an event happened, when it happened, or to list events.
@@ -64,6 +67,28 @@ ARGUMENT RULES:
 - Use exact values from the question or previous tool results.
 - If an identifier is missing, do not guess it.
 
+VLM INTERPRETATION RULES:
+
+- Treat vlm_description as the source of truth for the described visual activity.
+- Preserve the meaning of each VLM description. Do not add actions that are not explicitly described.
+- Pay attention to negative statements:
+  "not picking up", "not putting down", "does not interact"
+  must remain negative in your answer.
+- Do not interpret holding an object as picking it up or putting it down.
+- Do not interpret drinking from a cup as picking up or putting down the cup unless the description explicitly says so.
+- Do not describe an action as confirmed if the VLM description says it is uncertain, possible, or only appears to happen.
+- The event type "pickup_or_put_candidate" means a candidate interaction. It does NOT automatically confirm that an object was picked up or put down.
+- Distinguish between the event type and the action described by VLM.
+- If VLM says that no pickup or putdown occurred, explicitly preserve this information.
+- Do not combine events from different track_id values into one person's activity.
+- When summarizing multiple events, group them by track_id.
+- Treat different track_id values as different tracked persons. Do not assume they are the same person.
+- Keep events in chronological order within each person's timeline.
+- Do not assume that events with the same track_id prove continuous identity beyond the tracking data.
+- If descriptions contradict each other or are ambiguous, explain the uncertainty instead of choosing an unsupported interpretation.
+- Do not infer intentions, motives, object ownership, or reasons for actions.
+- Do not invent object types. If the description says "small object", do not call it a phone, snack, or another specific object unless stated.
+
 ANSWER RULES:
 
 - Answer in the same language as the question.
@@ -72,15 +97,20 @@ ANSWER RULES:
 - For time questions, report the exact time in seconds.
 - For lists, include person ID, event type, and timestamp.
 - For questions about what happened after an event, use chronological order.
+- When summarizing multiple people's activities, separate them by track_id.
+- When summarizing VLM descriptions, distinguish confirmed actions, possible actions, and explicitly absent actions.
+- Do not present candidate events as confirmed actions.
 - If no confirmed events are found, answer "не нашёл" or "No, not found".
 - If the requested information cannot be determined from the journal, answer:
   Russian: "ответить нельзя: в базе нет этих данных"
   English: "cannot answer: the journal has no such data"
 - Do not infer clothing colors, intentions, reasons, or other information not recorded in the journal.
 - Never invent information to make an answer sound complete.
+- Prefer concise, structured answers over repetitive summaries.
 
 The tool results are the only source of truth.
 """
+
 
 
 @dataclass
@@ -220,6 +250,13 @@ def run_agent(
                 if arg_err:
                     result = {"ok": False, "error": arg_err}
                 else:
+                    # A video ID does not imply a camera ID. Remove a guessed camera
+                    # filter unless that exact camera identifier appears in the question.
+                    if isinstance(args, dict) and args.get("video_id") and args.get("camera_id"):
+                        mentioned_camera = str(args["camera_id"]).casefold() in question.casefold()
+                        if not mentioned_camera:
+                            args = dict(args)
+                            args.pop("camera_id", None)
                     result = tool_schemas.call_tool(
                         name,
                         args,

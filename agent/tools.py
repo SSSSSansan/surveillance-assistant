@@ -103,6 +103,52 @@ def _integer(name, value, *, minimum=None):
     return int(x)
 
 
+def _resolve_vlm_variant(video_id, vlm_variant, conn=None, model=None):
+    """Choose a confirmed VLM variant for an explicitly selected video.
+
+    Keep the legacy default for unscoped queries. For a specific video, prefer
+    the variant with the most confirmed descriptions; when model is supplied,
+    prefer variants whose descriptions have current embeddings for that model.
+    """
+    if vlm_variant is not None:
+        return _str("vlm_variant", vlm_variant, upper=True)
+    if not video_id:
+        return DEFAULT_VLM_VARIANT
+
+    own = conn is None
+    db = _connect() if own else conn
+    cur = db.cursor()
+    try:
+        if model:
+            cur.execute(
+                "SELECT r.prompt_variant, COUNT(*) AS confirmed_count, "
+                "COUNT(d.event_id) AS embedded_count "
+                "FROM vlm_results r "
+                "LEFT JOIN description_embeddings d "
+                "ON d.video_id = r.video_id AND d.event_id = r.event_id "
+                "AND d.prompt_variant = r.prompt_variant AND d.model = %s "
+                "WHERE r.video_id = %s AND r.vlm_status = 'confirmed' "
+                "AND r.vlm_description IS NOT NULL "
+                "GROUP BY r.prompt_variant ORDER BY embedded_count DESC, "
+                "confirmed_count DESC, r.prompt_variant ASC",
+                [model, video_id],
+            )
+        else:
+            cur.execute(
+                "SELECT prompt_variant, COUNT(*) AS confirmed_count "
+                "FROM vlm_results WHERE video_id = %s AND vlm_status = 'confirmed' "
+                "AND vlm_description IS NOT NULL GROUP BY prompt_variant "
+                "ORDER BY confirmed_count DESC, prompt_variant ASC",
+                [video_id],
+            )
+        rows = cur.fetchall()
+        return rows[0][0] if rows else DEFAULT_VLM_VARIANT
+    finally:
+        cur.close()
+        if own:
+            db.close()
+
+
 def _prepare(view, video_id, camera_id, event_type, zone_id, track_id,
              t_from, t_to, vlm_variant):
     """Проверяет аргументы. Возвращает (вариант подсказки, WHERE-строка, параметры)."""
@@ -181,8 +227,9 @@ def _run(sql, params, conn):
 def _query(view, video_id, camera_id, event_type, zone_id, track_id, t_from, t_to,
            order, limit, vlm_variant, conn):
     try:
+        variant_hint = _resolve_vlm_variant(video_id, vlm_variant, conn=conn)
         variant, where, params = _prepare(view, video_id, camera_id, event_type, zone_id,
-                                          track_id, t_from, t_to, vlm_variant)
+                                          track_id, t_from, t_to, variant_hint)
         order = _str("order", order, lower=True) or "asc"
         if order not in ("asc", "desc"):
             raise ToolInputError("order: допустимо 'asc' или 'desc'")
@@ -209,8 +256,9 @@ def _query(view, video_id, camera_id, event_type, zone_id, track_id, t_from, t_t
 def _count(view, video_id, camera_id, event_type, zone_id, track_id, t_from, t_to,
            vlm_variant, conn):
     try:
+        variant_hint = _resolve_vlm_variant(video_id, vlm_variant, conn=conn)
         variant, where, params = _prepare(view, video_id, camera_id, event_type, zone_id,
-                                          track_id, t_from, t_to, vlm_variant)
+                                          track_id, t_from, t_to, variant_hint)
     except ToolInputError as e:
         return {"ok": False, "error": str(e)}
     _, rows = _run("SELECT COUNT(*) " + _FROM + where, [variant] + params, conn)
@@ -287,8 +335,9 @@ def _details(view, event_id, video_id, vlm_variant, conn, with_all_variants):
         event_id = _str("event_id", event_id)
         if event_id is None:
             raise ToolInputError("event_id: обязателен")
+        variant_hint = _resolve_vlm_variant(video_id, vlm_variant, conn=conn)
         variant, where, params = _prepare(view, video_id, None, None, None, None, None, None,
-                                          vlm_variant)
+                                          variant_hint)
     except ToolInputError as e:
         return {"ok": False, "error": str(e)}
     where = _add_where(where, "e.event_id = %s")
@@ -371,8 +420,15 @@ def search_descriptions(query=None, mode="semantic", top_k=5, video_id=None, cam
         top_k = _integer("top_k", top_k, minimum=1)
         top_k = min(top_k if top_k is not None else 5, MAX_LIMIT)
         min_score = _number("min_score", min_score)
+        if mode == "semantic":
+            from database import embeddings
+            embedder = embedder or embeddings.get_default_embedder()
+            model = model or getattr(embedder, "name", embeddings.DEFAULT_MODEL)
+        variant_hint = _resolve_vlm_variant(
+            video_id, vlm_variant, conn=conn, model=model if mode == "semantic" else None
+        )
         variant, where, params = _prepare("assistant", video_id, camera_id, event_type, None, None,
-                                          None, None, vlm_variant)
+                                          None, None, variant_hint)
         where = _add_where(where, "r.vlm_description IS NOT NULL")
     except ToolInputError as e:
         return {"ok": False, "error": str(e)}
@@ -397,9 +453,6 @@ def search_descriptions(query=None, mode="semantic", top_k=5, video_id=None, cam
         skipped = 0
     else:
         try:
-            from database import embeddings
-            embedder = embedder or embeddings.get_default_embedder()
-            model = model or getattr(embedder, "name", embeddings.DEFAULT_MODEL)
             qvec = embedder.embed([query])[0]
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": f"не удалось посчитать эмбеддинг запроса: {e}"}

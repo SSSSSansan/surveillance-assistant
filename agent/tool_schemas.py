@@ -35,7 +35,9 @@ _FILTERS = {
         "Event type. enter/exit: a person enters/leaves the scene; "
         "approach_zone/leave_zone/dwell_in_zone: movement relative to a zone; "
         "pick_up/put_down: a person takes/puts an object; "
-        "abandoned_object: an object is left unattended.",
+        "abandoned_object: an object is left unattended; "
+        "pickup_or_put_candidate: CV candidate for a possible pickup or put-down. "
+        "Use this exact spelling; do not invent variants such as pick_up_or_put_candidate.",
         enum=_EVENT_TYPES
     ),
     "zone_id": _p(
@@ -79,7 +81,10 @@ SPECS = [
         "Find confirmed events in the video event journal, sorted by time. "
         "Use it for 'was there...', 'when...' and for listing events. "
         "Never use it to count: use count_events. "
-        "Returns an empty list when nothing is found.",
+        "Returns an empty list when nothing is found. "
+        "For a request containing multiple event types joined by OR (for example pick_up OR put_down), "
+        "make one query_events call per event_type; never invent a combined event_type. "
+        "If the user provides video_id but no camera_id, pass only video_id.",
         {
             **_FILTERS,
             "order": _p(
@@ -97,7 +102,10 @@ SPECS = [
     _spec(
         "count_events",
         "Count confirmed events that match the filters. "
-        "Always use it for 'how many' questions; never count events yourself.",
+        "Always use it for 'how many' questions; never count events yourself. "
+        "For multiple event types joined by OR, make one count_events call per event_type "
+        "and report the separate counts (do not invent a combined type). "
+        "If the user provides video_id but no camera_id, pass only video_id.",
         dict(_FILTERS)
     ),
 
@@ -152,7 +160,9 @@ SPECS = [
         "Do not guess identifiers. "
         "Use mode='semantic' for meaning-based search and mode='keyword' "
         "for exact word matching. Event descriptions are stored in English. "
-        "Returns matching events with similarity scores.",
+        "Returns matching events with similarity scores. "
+        "If the user provides video_id but no camera_id, pass only video_id. "
+        "Never guess a camera_id from a video_id.",
         {
             "query": _p(
                 "string",
@@ -239,6 +249,10 @@ def call_tool(name, arguments, conn=None, embedder=None):
         }
 
     kwargs = dict(arguments)
+
+    # Repair a known Qwen spelling variant; keep the canonical database value.
+    if kwargs.get("event_type") == "pick_up_or_put_candidate":
+        kwargs["event_type"] = "pickup_or_put_candidate"
 
     if name == "search_descriptions" and embedder is not None:
         kwargs["embedder"] = embedder

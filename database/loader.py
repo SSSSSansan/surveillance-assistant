@@ -272,10 +272,34 @@ def load_vlm_file(path, expected_variant=None, conn=None):
     if errs:
         rep["errors"] = errs
         return rep
+    # VLM output files may contain the full CV event list. Entries that were
+    # never processed by VLM have no prompt variant and no description; they
+    # are not rows for vlm_results (prompt_variant is NOT NULL in the schema).
+    raw_events = data.get("events", [])
+    skipped_unprocessed = 0
+    if isinstance(raw_events, list):
+        filtered_events = []
+        for event in raw_events:
+            if (
+                isinstance(event, dict)
+                and event.get("prompt_variant") is None
+                and event.get("vlm_status", "not_checked") == "not_checked"
+                and event.get("vlm_description") is None
+            ):
+                skipped_unprocessed += 1
+                continue
+            filtered_events.append(event)
+        data = dict(data)
+        data["events"] = filtered_events
+
     vid, cam, src, events, errors, notes = _validate(data, "vlm", expected_variant)
     if errors:
         rep["errors"] = errors
         return rep
+    if skipped_unprocessed:
+        rep["warnings"].append(
+            f"Пропущено необработанных событий без prompt_variant: {skipped_unprocessed}"
+        )
 
     conn, own = _open(conn)
     cur = conn.cursor()
