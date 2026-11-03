@@ -14,7 +14,7 @@
 import json
 
 ALLOWED_SOURCES = {"own", "meva", "warehouse"}
-ALLOWED_VLM_STATUS = {"not_checked", "confirmed", "rejected", "error"}
+ALLOWED_VLM_STATUS = {"not_checked", "confirmed", "rejected"}
 ALLOWED_VLM_TYPES = {None, "pick_up", "put_down", "none"}
 
 
