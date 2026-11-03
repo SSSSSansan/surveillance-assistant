@@ -4,7 +4,7 @@
       --camera-id G421 --source meva --out cv/events.json --clips-dir clips
 
 Правила (ногами человека считается середина нижней стороны рамки):
-  entered / exited          трек начинается / заканчивается в зоне вида entrance
+  enter / exit              трек начинается / заканчивается в зоне вида entrance
   approach_zone / leave_zone  трек вошёл в зону / вышел из неё
   dwell_in_zone             пробыл в зоне не меньше --dwell секунд
   pickup_or_put_candidate   пробыл в зоне вида object не меньше --dwell секунд, клип 2-8 с -> в VLM
@@ -62,11 +62,11 @@ def detect(tracks, zones, dwell=3.0, gap=1.0, min_stay=0.5, edge=1.0):
                 is_in = z["kind"] == "entrance" and s - first_t <= edge
                 is_out = z["kind"] == "entrance" and last_t - e <= edge
                 if is_in:
-                    found.append(("entered", tid, zid, s, min(s + 1.0, e)))
+                    found.append(("enter", tid, zid, s, min(s + 1.0, e)))
                 else:
                     found.append(("approach_zone", tid, zid, s, min(s + 1.0, e)))
                 if is_out:
-                    found.append(("exited", tid, zid, max(e - 1.0, s), e))
+                    found.append(("exit", tid, zid, max(e - 1.0, s), e))
                 else:
                     found.append(("leave_zone", tid, zid, max(e - 1.0, s), e))
                 if dur >= dwell:
@@ -101,7 +101,10 @@ if __name__ == "__main__":
     p.add_argument("--source", default="meva", choices=["own", "meva", "warehouse"])
     p.add_argument("--out", default="cv/events.json")
     p.add_argument("--clips-dir", default="clips")
-    p.add_argument("--dwell", type=float, default=3.0)
+    p.add_argument("--dwell", type=float, default=3.0, help="сек в зоне для dwell и кандидата")
+    p.add_argument("--gap", type=float, default=1.0, help="пропуск, при котором зона не считается покинутой")
+    p.add_argument("--min-stay", type=float, default=0.5, help="минимум секунд в зоне, чтобы считать заход")
+    p.add_argument("--edge", type=float, default=1.0, help="допуск у начала/конца трека для enter/exit")
     a = p.parse_args()
 
     import json
@@ -109,7 +112,7 @@ if __name__ == "__main__":
     Z = json.load(open(a.zones, encoding="utf-8"))["zones"]
     os.makedirs(a.clips_dir, exist_ok=True)
     events = []
-    for i, (typ, tid, zid, t0, t1) in enumerate(detect(T["tracks"], Z, dwell=a.dwell)):
+    for i, (typ, tid, zid, t0, t1) in enumerate(detect(T["tracks"], Z, dwell=a.dwell, gap=a.gap, min_stay=a.min_stay, edge=a.edge)):
         clip = None
         if typ == "pickup_or_put_candidate":
             clip = os.path.join(a.clips_dir, f"cv_{i:04d}.mp4")

@@ -3,14 +3,16 @@
   python cv/eval_vs_meva.py cv/events.json data/gt.json --tol 2
 
 Сопоставление только по времени (допуск --tol секунд): номера треков у нас и в MEVA разные.
-Названия активностей смотри в выводе meva_gt.py и при необходимости поправь MAPPING.
+Два подсчёта:
+  мягкий   одно наше событие может засчитаться за несколько размеченных (завышает recall)
+  строгий  каждое наше событие засчитывается не больше одного раза (честная цифра для отчёта)
 """
 import argparse
 import json
 
 MAPPING = {
-    "person_enters_scene_through_structure": {"entered"},
-    "person_exits_scene_through_structure": {"exited"},
+    "person_enters_scene_through_structure": {"enter"},
+    "person_exits_scene_through_structure": {"exit"},
     "person_picks_up_object": {"pickup_or_put_candidate"},
     "person_puts_down_object": {"pickup_or_put_candidate"},
 }
@@ -28,15 +30,27 @@ if __name__ == "__main__":
     a = p.parse_args()
     ev = json.load(open(a.events, encoding="utf-8"))["events"]
     gt = json.load(open(a.gt, encoding="utf-8"))["activities"]
-    print(f"{'активность MEVA':45s} размечено  найдено  recall")
+    used = set()  # индексы наших событий, уже засчитанных в строгом режиме
+    print(f"{'активность MEVA':40s} {'размечено':>9s} {'мягко':>6s} {'recall':>7s} {'строго':>7s} {'recall':>7s}")
+    strict_total = 0
     for name, types in MAPPING.items():
-        g = [x for x in gt if x["name"] == name]
-        hit = sum(any(e["event_type"] in types and overlap(x["t_start"], x["t_end"], e["t_start"], e["t_end"], a.tol)
-                      for e in ev) for x in g)
-        print(f"{name:45s} {len(g):9d} {hit:8d}  {hit / len(g):.2f}" if g else f"{name:45s} {0:9d}")
+        g = sorted((x for x in gt if x["name"] == name), key=lambda x: x["t_start"])
+        soft = strict = 0
+        for x in g:
+            cands = [i for i, e in enumerate(ev) if e["event_type"] in types
+                     and overlap(x["t_start"], x["t_end"], e["t_start"], e["t_end"], a.tol)]
+            soft += bool(cands)
+            free = [i for i in cands if i not in used]
+            if free:
+                used.add(free[0])
+                strict += 1
+        strict_total += strict
+        if g:
+            print(f"{name:40s} {len(g):9d} {soft:6d} {soft / len(g):7.2f} {strict:7d} {strict / len(g):7.2f}")
+        else:
+            print(f"{name:40s} {0:9d}")
     mapped = set().union(*MAPPING.values())
     ours = [e for e in ev if e["event_type"] in mapped]
-    good = sum(any(x["name"] in MAPPING and e["event_type"] in MAPPING[x["name"]]
-                   and overlap(x["t_start"], x["t_end"], e["t_start"], e["t_end"], a.tol) for x in gt) for e in ours)
     if ours:
-        print(f"\nнаших событий этих типов: {len(ours)}, совпало с разметкой: {good} ({good / len(ours):.2f})")
+        print(f"\nнаших событий этих типов: {len(ours)}; "
+              f"засчитано строго: {len(used)} (precision {len(used) / len(ours):.2f})")
