@@ -53,6 +53,30 @@ Never invent their identifiers.
 Use when the question asks about the content or meaning of textual event descriptions.
 Do not use it for counting or ordinary filtering by event type, time, person, or zone.
 
+SNAPSHOT ARCHIVE (one frame every ~30 seconds: number of people and their clothing).
+Snapshots are NOT linked to track_id. They answer "was anyone in ...", never "what did person N wear".
+
+7. search_by_clothing
+Use when asking whether anyone wore a given clothing, or when someone was in it.
+Examples:
+- Was anyone in a red sweater? -> color="red", clothing_type="sweater"
+- When was someone in a green jacket? -> color="green", clothing_type="jacket"
+Pass colour and type in English (colours: red, green, blue, black, white, gray; types: sweater, t-shirt, shirt, jacket, coat).
+Omit the argument you do not know; do not send empty strings.
+If found is true, start with "Да" and give the times of the matches in seconds.
+If found is false, answer "Нет, не нашёл".
+Never use it for events or for the clothing of a specific track_id.
+
+8. count_people_at
+Use for "how many people were in the frame at time X". Pass t in seconds (1:30 = 90).
+Do NOT use count_events for this question.
+Snapshots are about 30 seconds apart: if the returned snapshot time t differs from the asked time,
+say which time the answer is for.
+
+9. get_snapshot_summary
+Use for the maximum or average number of people, the most crowded moment, or what clothes people wore.
+Answer from max_people, max_people_t, avg_people and the people lists. Do not count yourself.
+
 ARGUMENT RULES:
 
 - video_id identifies a video; camera_id identifies a camera. They are different.
@@ -104,7 +128,10 @@ ANSWER RULES:
 - If the requested information cannot be determined from the journal, answer:
   Russian: "ответить нельзя: в базе нет этих данных"
   English: "cannot answer: the journal has no such data"
-- Do not infer clothing colors, intentions, reasons, or other information not recorded in the journal.
+- Clothing is known ONLY from the snapshot archive (search_by_clothing, count_people_at, get_snapshot_summary).
+  Never infer clothing from events or from VLM event descriptions.
+- Snapshots are not linked to track_id: for the clothing of a specific person (track_id) answer that it cannot be determined.
+- Do not infer intentions, reasons, or other information not recorded in the journal.
 - Never invent information to make an answer sound complete.
 - Prefer concise, structured answers over repetitive summaries.
 
@@ -168,6 +195,16 @@ def slim_for_model(result):
 
     if isinstance(out.get("event"), dict):
         out["event"] = _slim_event(out["event"])
+
+    # этап 2: срезы; пути к кадрам и служебное поле модели не нужны
+    for key in ("matches", "snapshots"):
+        if isinstance(out.get(key), list):
+            out[key] = [
+                {k: v for k, v in x.items() if k not in ("frame_path", "described")}
+                if isinstance(x, dict) else x
+                for x in out[key]
+            ]
+    out.pop("frame_path", None)
 
     return out
 

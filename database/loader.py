@@ -27,6 +27,7 @@ import math
 import sys
 
 from agent import tools
+from database.snapshots_loader import load_snapshots_file
 
 VLM_STATUSES = ("not_checked", "confirmed", "rejected")
 
@@ -362,6 +363,8 @@ def main(argv=None):
     v = sub.add_parser("vlm", help="VLM-файл (vlm_results)")
     v.add_argument("files", nargs="+")
     v.add_argument("--variant", choices=["A", "B"], help="ожидаемый вариант подсказки в файле")
+    sn = sub.add_parser("snapshots", help="snapshots.json (срезы, этап 2)")
+    sn.add_argument("files", nargs="+")
     e = sub.add_parser("embed", help="посчитать эмбеддинги описаний")
     e.add_argument("--model", default=None)
     args = p.parse_args(argv)
@@ -378,7 +381,8 @@ def main(argv=None):
             print(json.dumps(res, ensure_ascii=False, indent=2))
             return 0 if res.get("ok") else 1
         for f in args.files:
-            res = (load_cv_file(f) if args.cmd == "cv" else load_vlm_file(f, args.variant))
+            res = (load_cv_file(f) if args.cmd == "cv" else
+                   load_snapshots_file(f) if args.cmd == "snapshots" else load_vlm_file(f, args.variant))
             print(json.dumps(res, ensure_ascii=False, indent=2))
             bad = bad or not res["ok"]
     except RuntimeError as e:  # нет DATABASE_URL, нет psycopg2 и т. п.

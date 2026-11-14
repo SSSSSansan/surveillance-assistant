@@ -5,4 +5,5 @@ collect_ignore = [
     "test_loader.py",
     "test_t10_tools.py",
     "test_agent.py",
+    "test_snapshots.py",
 ]

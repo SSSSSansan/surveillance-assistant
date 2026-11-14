@@ -20,6 +20,7 @@ from agent import config  # noqa: E402
 from agent.demo_db import make_demo_db  # noqa: E402
 from agent.llm import OpenAICompatClient  # noqa: E402
 from agent.runner import run_agent  # noqa: E402
+from agent.archive_helpers import collect_snapshots, fmt_clock, people_html  # noqa: E402
 from agent.ui_helpers import collect_events, event_row, safe_clip_path  # noqa: E402
 
 DEMO = "Демо (SQLite, тестовые данные)"
@@ -78,6 +79,22 @@ if result is not None:
                 st.video(str(path))
             else:
                 st.warning(f"Файл клипа не найден в папке «{clips_root}»: {clip[2]}")
+
+    snaps = collect_snapshots(result.steps)
+    if snaps:
+        st.subheader("Кадры из архива")
+        for start in range(0, min(len(snaps), 8), 4):
+            row = snaps[start:start + 4]
+            for col, sn in zip(st.columns(4), row):
+                with col:
+                    path = safe_clip_path(sn.get("frame_path"), clips_root)
+                    if path:
+                        st.image(str(path), use_container_width=True)
+                    else:
+                        st.caption(f"Кадр не найден: {sn.get('frame_path') or 'путь не задан'}")
+                    st.caption(f"{fmt_clock(sn['t'])} ({sn['t']:g} с), людей: {sn.get('people_count')}")
+                    if sn.get("people"):
+                        st.markdown(people_html(sn["people"]), unsafe_allow_html=True)
 
     with st.expander("Вызовы функций (для проверки)"):
         for step in result.steps:

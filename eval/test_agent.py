@@ -29,9 +29,10 @@ conn = make_demo_db()
 print("== схемы инструментов ==")
 specs = tool_schemas.to_openai_tools()
 names = [s["function"]["name"] for s in specs]
-check("ровно шесть обычных функций",
+check("девять обычных функций: шесть из этапа 1 и три из этапа 2",
       names == ["query_events", "count_events", "get_track_timeline", "get_event_details",
-                "list_zones_cameras", "search_descriptions"], names)
+                "list_zones_cameras", "search_descriptions", "search_by_clothing", "count_people_at",
+                "get_snapshot_summary"], names)
 check("debug-функции модели не показываются", not any(n.startswith("debug") for n in names))
 FORBIDDEN = {"conn", "vlm_variant", "view", "embedder", "model", "min_score", "include_rejected"}
 for s in specs:
@@ -156,7 +157,7 @@ with fake_llm.FakeOpenAIServer(fake_llm.WrongToolClient()) as srv:
     body, hdr = srv.requests[0], srv.headers[0]
     check("в запросе: модель, сообщения, tools, tool_choice, temperature 0",
           body["model"] == "test-model" and body["messages"][0]["content"] == "Привет"
-          and len(body["tools"]) == 6 and body["tool_choice"] == "auto" and body["temperature"] == 0.0, body.keys())
+          and len(body["tools"]) == 9 and body["tool_choice"] == "auto" and body["temperature"] == 0.0, body.keys())
     check("кириллица передаётся без искажений", body["messages"][0]["content"] == "Привет")
     check("заголовок Authorization", hdr.get("Authorization") == "Bearer k123")
     check("tool_calls разобраны", msg["tool_calls"][0]["function"]["name"] == "count_events")

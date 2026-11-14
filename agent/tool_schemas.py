@@ -1,14 +1,14 @@
 
 """Схемы инструментов для модели и безопасный вызов функций из agent/tools.py.
 
-Модели отдаются только шесть обычных функций. Отладочные debug_*,
+Модели отдаются только девять обычных функций (шесть по событиям и три по срезам, этап 2). Отладочные debug_*,
 параметры vlm_variant, view, conn, embedder, model и min_score модели
 НЕ показываются и вызвать их через call_tool нельзя.
 """
 
 import json
 
-from agent import tools
+from agent import snapshot_tools, tools
 
 _EVENT_TYPES = list(tools.EVENT_TYPES)
 
@@ -193,6 +193,55 @@ SPECS = [
         },
         required=["query"]
     ),
+
+    # ---- этап 2: архив срезов (кадр каждые ~30 секунд; люди и одежда) ----
+    _spec(
+        "search_by_clothing",
+        "Search the snapshot archive (one frame every ~30 seconds) for people by clothing. "
+        "Use it for 'was anyone in a red sweater', 'when was someone in a green jacket', "
+        "'was there a person in a blue t-shirt'. Pass at least one of color or clothing_type. "
+        "found=true means yes; matches lists the moments (t in seconds). "
+        "Not for events (enter, pick_up) and not for the clothing of a specific person id: "
+        "snapshots are not linked to person ids.",
+        {
+            "color": _p(
+                "string",
+                "Clothing colour in English: red, green, blue, black, white, gray, "
+                "yellow, orange, brown, pink, purple, beige."
+            ),
+            "clothing_type": _p(
+                "string",
+                "Clothing type: sweater (also hoodie, cardigan), t-shirt, shirt, jacket, coat, dress."
+            ),
+            "video_id": _p("string", "Video identifier. Omit to search all videos."),
+            "t_from": _p("number", "Window start, seconds from the start of the video."),
+            "t_to": _p("number", "Window end, seconds from the start of the video.")
+        }
+    ),
+
+    _spec(
+        "count_people_at",
+        "How many people were in the frame at a given moment. Uses the snapshot nearest to the "
+        "time t and returns that snapshot's time (snapshots are ~30 seconds apart) and its "
+        "clothing descriptions. Use it for 'how many people were there at 1:30'. "
+        "Do not use count_events for this.",
+        {
+            "t": _p("number", "Moment in seconds from the start of the video (1:30 = 90)."),
+            "video_id": _p("string", "Video identifier; required if the archive has several videos.")
+        },
+        required=["t"]
+    ),
+
+    _spec(
+        "get_snapshot_summary",
+        "The whole snapshot archive of a video: people count and clothing at every snapshot, plus "
+        "max_people, max_people_t (when it was the most crowded) and avg_people. Use it for "
+        "'when were there the most people', 'what was the maximum / average number of people', "
+        "'what clothes did people wear'.",
+        {
+            "video_id": _p("string", "Video identifier; required if the archive has several videos.")
+        }
+    ),
 ]
 
 
@@ -203,6 +252,9 @@ TOOL_FUNCS = {
     "get_event_details": tools.get_event_details,
     "list_zones_cameras": tools.list_zones_cameras,
     "search_descriptions": tools.search_descriptions,
+    "search_by_clothing": snapshot_tools.search_by_clothing,
+    "count_people_at": snapshot_tools.count_people_at,
+    "get_snapshot_summary": snapshot_tools.get_snapshot_summary,
 }
 
 ALLOWED_ARGS = {

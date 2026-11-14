@@ -1,0 +1,182 @@
+{
+  "video_id": "test_video_01",
+  "camera_id": "test_cam01",
+  "source": "meva",
+  "interval_sec": 30,
+  "snapshots": [
+    {
+      "snapshot_id": "sn_0000",
+      "t": 0.0,
+      "frame_path": "demo_frames/test_video_01/sn_0000.jpg",
+      "people_count": 0,
+      "people": []
+    },
+    {
+      "snapshot_id": "sn_0001",
+      "t": 30.0,
+      "frame_path": "demo_frames/test_video_01/sn_0001.jpg",
+      "people_count": 1,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "black jacket, walking toward the door"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0002",
+      "t": 60.0,
+      "frame_path": "demo_frames/test_video_01/sn_0002.jpg",
+      "people_count": 2,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "red",
+          "clothing_type": "sweater",
+          "description": "red sweater, standing near the desk"
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "black jacket, walking"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0003",
+      "t": 90.0,
+      "frame_path": "demo_frames/test_video_01/sn_0003.jpg",
+      "people_count": 3,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "red",
+          "clothing_type": "sweater",
+          "description": "red sweater, sitting at the desk"
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "blue",
+          "clothing_type": "t-shirt",
+          "description": "blue t-shirt, standing"
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "unknown",
+          "clothing_type": "unknown",
+          "description": "back turned, partially visible"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0004",
+      "t": 120.0,
+      "frame_path": "demo_frames/test_video_01/sn_0004.jpg",
+      "people_count": 2,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "blue",
+          "clothing_type": "t-shirt",
+          "description": "blue t-shirt, near the door"
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "white",
+          "clothing_type": "shirt",
+          "description": "white shirt, holding a bag"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0005",
+      "t": 150.0,
+      "frame_path": "demo_frames/test_video_01/sn_0005.jpg",
+      "people_count": 2,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "green",
+          "clothing_type": "jacket",
+          "description": "green jacket, standing near the desk"
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "white",
+          "clothing_type": "shirt",
+          "description": "white shirt, walking"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0006",
+      "t": 180.0,
+      "frame_path": "demo_frames/test_video_01/sn_0006.jpg",
+      "people_count": 4,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "green",
+          "clothing_type": "jacket",
+          "description": "green jacket, picking up an object"
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "black hoodie, sitting"
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "gray sweater, standing"
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "blue",
+          "clothing_type": "t-shirt",
+          "description": "blue t-shirt, walking"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0007",
+      "t": 210.0,
+      "frame_path": "demo_frames/test_video_01/sn_0007.jpg",
+      "people_count": 1,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "black hoodie, leaving through the door"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0008",
+      "t": 240.0,
+      "frame_path": "demo_frames/test_video_01/sn_0008.jpg",
+      "people_count": 1,
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "gray sweater, standing near the desk"
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0009",
+      "t": 270.0,
+      "frame_path": "demo_frames/test_video_01/sn_0009.jpg",
+      "people_count": 0,
+      "people": []
+    }
+  ]
+}
