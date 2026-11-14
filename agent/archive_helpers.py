@@ -85,3 +85,83 @@ def collect_snapshots(steps):
                 seen.add(key)
                 out.append(sn)
     return out
+
+
+# ---------- карточки архива (вёрстка в HTML, чтобы вид не зависел от внутреннего устройства Streamlit) ----------
+import base64  # noqa: E402
+import functools  # noqa: E402
+import io  # noqa: E402
+import os  # noqa: E402
+
+
+import re  # noqa: E402
+
+_DATA_URI = re.compile(r"data:image/jpeg;base64,[A-Za-z0-9+/=]+")   # строго base64: в атрибут src ничего лишнего не попадёт
+
+
+@functools.lru_cache(maxsize=512)
+def _thumb_cached(path_str, mtime, max_w):
+    try:
+        from PIL import Image
+        with Image.open(path_str) as im:
+            im = im.convert("RGB")
+            im.thumbnail((max_w, max_w))
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=70)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:  # noqa: BLE001  (нет Pillow, битый файл и т. п.: карточка покажет заглушку)
+        return None
+
+
+def thumb_data_uri(path, max_w=360):
+    """Уменьшенный кадр как data-URI для вставки в HTML-карточку. None, если файла нет или он не читается."""
+    if not path:
+        return None
+    try:
+        return _thumb_cached(str(path), os.path.getmtime(path), max_w)
+    except OSError:
+        return None
+
+
+def snapshot_text(s):
+    """Текст карточки: описания людей одной строкой (чистый текст, в HTML экранируется при выводе)."""
+    descs = [(p.get("description") or person_label(p)) for p in s.get("people", [])]
+    if descs:
+        return "; ".join(descs)
+    return "В кадре никого нет." if s.get("people_count") == 0 else "Одежда ещё не описана (VLM)."
+
+
+def search_snapshots(snapshots, query):
+    """Поиск по описанию: подстрока без учёта регистра в тексте, цвете, типе и номере среза."""
+    q = (query or "").strip().lower()
+    if not q:
+        return list(snapshots)
+    out = []
+    for s in snapshots:
+        hay = " ".join([snapshot_text(s), str(s.get("snapshot_id", "")), fmt_clock(s["t"])] +
+                       [f"{p.get('clothing_color', '')} {p.get('clothing_type', '')}" for p in s.get("people", [])])
+        if q in hay.lower():
+            out.append(s)
+    return out
+
+
+def sort_snapshots(snapshots, newest_first=True):
+    return sorted(snapshots, key=lambda s: s["t"], reverse=bool(newest_first))
+
+
+def card_html(s, thumb_uri=None, matched=False, missing_text="кадр не найден"):
+    """HTML одной карточки среза. Всё, что пришло из базы (описания от VLM, пути), экранируется;
+    картинка вставляется только как data:image/..., созданная thumb_data_uri."""
+    if isinstance(thumb_uri, str) and _DATA_URI.fullmatch(thumb_uri):
+        img = f'<img src="{thumb_uri}" alt="">'
+    else:
+        img = f'<div class="noimg">{html.escape(missing_text)}</div>'
+    head = (f'<span class="ts">{fmt_clock(s["t"])}</span>'
+            f'<span class="meta">{html.escape(str(s.get("snapshot_id", "")))} · {s["t"]:g} с</span>'
+            f'<span class="badge">людей: {int(s.get("people_count", 0))}</span>')
+    if matched:
+        head += '<span class="badge hit">совпадение</span>'
+    chips = people_html(s["people"]) if s.get("people") else ""
+    return (f'<div class="card{" hit" if matched else ""}"><div class="card-img">{img}</div><div class="card-body">'
+            f'<div class="card-head">{head}</div><div class="card-text">{html.escape(snapshot_text(s))}</div>'
+            f'<div>{chips}</div></div></div>')

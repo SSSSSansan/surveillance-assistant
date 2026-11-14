@@ -1,0 +1,11 @@
+# Тема по умолчанию: тёмная нейтральная (цвета карточек и хедера: agent/ui_theme.py, палитры PALETTES).
+# Файл читается, когда Streamlit запускается из корня проекта: python -m streamlit run agent/app.py
+[theme]
+base = "dark"
+backgroundColor = "#0d0e12"
+secondaryBackgroundColor = "#15161d"
+primaryColor = "#ff7a45"
+textColor = "#ececf0"
+
+[client]
+toolbarMode = "minimal"
