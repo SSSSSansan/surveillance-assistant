@@ -1,0 +1,3026 @@
+{
+  "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
+  "camera_id": "G421",
+  "source": "meva",
+  "interval_sec": 30.0,
+  "snapshots": [
+    {
+      "snapshot_id": "sn_0000",
+      "t": 0.0,
+      "frame_path": "frames/sn_0000.jpg",
+      "people_count": 13,
+      "boxes": [
+        [
+          176.6,
+          340.8,
+          318.7,
+          467.3
+        ],
+        [
+          240.7,
+          290.4,
+          359.7,
+          428.0
+        ],
+        [
+          318.2,
+          377.4,
+          518.1,
+          694.2
+        ],
+        [
+          339.7,
+          273.1,
+          415.2,
+          372.0
+        ],
+        [
+          415.8,
+          265.3,
+          522.3,
+          371.3
+        ],
+        [
+          416.4,
+          265.2,
+          523.0,
+          429.4
+        ],
+        [
+          506.5,
+          261.0,
+          606.0,
+          434.4
+        ],
+        [
+          527.5,
+          804.5,
+          828.6,
+          1070.0
+        ],
+        [
+          536.5,
+          313.7,
+          664.2,
+          618.9
+        ],
+        [
+          772.1,
+          284.8,
+          883.5,
+          566.5
+        ],
+        [
+          812.5,
+          287.2,
+          984.4,
+          574.4
+        ],
+        [
+          1333.9,
+          252.4,
+          1505.5,
+          655.9
+        ],
+        [
+          1632.4,
+          340.8,
+          1830.1,
+          755.3
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person wears gray jacket, seated with hands near face.",
+          "box": [
+            176.6,
+            340.8,
+            318.7,
+            467.3
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "gray",
+          "clothing_type": "t-shirt",
+          "description": "Man in gray t-shirt sitting, hand on head.",
+          "box": [
+            240.7,
+            290.4,
+            359.7,
+            428.0
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket sits with back to camera, holding object to face.",
+          "box": [
+            318.2,
+            377.4,
+            518.1,
+            694.2
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie and cap, sitting on couch.",
+          "box": [
+            339.7,
+            273.1,
+            415.2,
+            372.0
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man wearing black jacket, seated, holding phone.",
+          "box": [
+            415.8,
+            265.3,
+            522.3,
+            371.3
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket sitting on couch, holding water bottle.",
+          "box": [
+            416.4,
+            265.2,
+            523.0,
+            429.4
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Man in black hoodie sitting, leaning forward.",
+          "box": [
+            506.5,
+            261.0,
+            606.0,
+            434.4
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wearing light blue sweater, head down, facing away.",
+          "box": [
+            527.5,
+            804.5,
+            828.6,
+            1070.0
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Man in gray jacket holds coffee cup while seated.",
+          "box": [
+            536.5,
+            313.7,
+            664.2,
+            618.9
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, holding phone.",
+          "box": [
+            772.1,
+            284.8,
+            883.5,
+            566.5
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, seated at table, facing away.",
+          "box": [
+            812.5,
+            287.2,
+            984.4,
+            574.4
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "brown",
+          "clothing_type": "t-shirt",
+          "description": "Person wears brown t-shirt and cap, walking indoors.",
+          "box": [
+            1333.9,
+            252.4,
+            1505.5,
+            655.9
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "gray",
+          "clothing_type": "t-shirt",
+          "description": "Man in gray t-shirt holds orange ball while walking.",
+          "box": [
+            1632.4,
+            340.8,
+            1830.1,
+            755.3
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 13,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0001",
+      "t": 30.0,
+      "frame_path": "frames/sn_0001.jpg",
+      "people_count": 13,
+      "boxes": [
+        [
+          0.2,
+          688.3,
+          142.4,
+          1069.8
+        ],
+        [
+          167.2,
+          342.4,
+          335.0,
+          465.8
+        ],
+        [
+          168.2,
+          342.0,
+          247.7,
+          416.4
+        ],
+        [
+          237.7,
+          290.5,
+          362.9,
+          441.0
+        ],
+        [
+          321.7,
+          384.7,
+          512.1,
+          702.4
+        ],
+        [
+          339.3,
+          273.4,
+          417.9,
+          374.1
+        ],
+        [
+          410.5,
+          653.9,
+          723.9,
+          1067.9
+        ],
+        [
+          416.1,
+          264.0,
+          525.0,
+          425.9
+        ],
+        [
+          508.2,
+          267.4,
+          610.2,
+          434.8
+        ],
+        [
+          530.5,
+          325.5,
+          673.7,
+          621.6
+        ],
+        [
+          770.3,
+          283.0,
+          880.7,
+          564.4
+        ],
+        [
+          811.9,
+          289.7,
+          984.0,
+          574.8
+        ],
+        [
+          1612.9,
+          300.8,
+          1798.4,
+          739.2
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "hoodie",
+          "description": "Person wears gray hoodie, standing with arms crossed.",
+          "box": [
+            0.2,
+            688.3,
+            142.4,
+            1069.8
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, holding phone to ear.",
+          "box": [
+            167.2,
+            342.4,
+            335.0,
+            465.8
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie holding phone to ear.",
+          "box": [
+            168.2,
+            342.0,
+            247.7,
+            416.4
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "beige",
+          "clothing_type": "shirt",
+          "description": "Man in beige short-sleeved shirt sitting with hand on head.",
+          "box": [
+            237.7,
+            290.5,
+            362.9,
+            441.0
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wearing black jacket, seated on chair, back to camera.",
+          "box": [
+            321.7,
+            384.7,
+            512.1,
+            702.4
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, sitting with hands clasped.",
+          "box": [
+            339.3,
+            273.4,
+            417.9,
+            374.1
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wearing light blue sweater, seen from behind.",
+          "box": [
+            410.5,
+            653.9,
+            723.9,
+            1067.9
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie holding head with one hand.",
+          "box": [
+            416.1,
+            264.0,
+            525.0,
+            425.9
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, leaning forward with head down.",
+          "box": [
+            508.2,
+            267.4,
+            610.2,
+            434.8
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Man in gray sweater leans over laptop at table.",
+          "box": [
+            530.5,
+            325.5,
+            673.7,
+            621.6
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, holding phone.",
+          "box": [
+            770.3,
+            283.0,
+            880.7,
+            564.4
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, seated at table, facing away.",
+          "box": [
+            811.9,
+            289.7,
+            984.0,
+            574.8
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket holding a cup while walking.",
+          "box": [
+            1612.9,
+            300.8,
+            1798.4,
+            739.2
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 13,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0002",
+      "t": 60.0,
+      "frame_path": "frames/sn_0002.jpg",
+      "people_count": 15,
+      "boxes": [
+        [
+          0.2,
+          586.5,
+          194.4,
+          1065.1
+        ],
+        [
+          169.8,
+          341.9,
+          323.6,
+          449.5
+        ],
+        [
+          237.8,
+          292.6,
+          360.9,
+          430.3
+        ],
+        [
+          329.0,
+          386.1,
+          517.4,
+          678.6
+        ],
+        [
+          338.3,
+          278.6,
+          415.8,
+          377.5
+        ],
+        [
+          349.4,
+          711.8,
+          695.6,
+          1068.3
+        ],
+        [
+          413.3,
+          266.0,
+          511.2,
+          362.3
+        ],
+        [
+          498.7,
+          268.5,
+          614.4,
+          430.5
+        ],
+        [
+          531.3,
+          326.5,
+          676.8,
+          623.7
+        ],
+        [
+          667.0,
+          119.4,
+          715.7,
+          301.9
+        ],
+        [
+          769.9,
+          281.6,
+          876.6,
+          566.2
+        ],
+        [
+          816.6,
+          287.8,
+          986.9,
+          573.4
+        ],
+        [
+          900.7,
+          208.4,
+          998.5,
+          397.0
+        ],
+        [
+          1182.3,
+          227.2,
+          1287.1,
+          509.5
+        ],
+        [
+          1775.3,
+          307.6,
+          1918.8,
+          524.0
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person in gray jacket reaches for coffee pot.",
+          "box": [
+            0.2,
+            586.5,
+            194.4,
+            1065.1
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person in black sweater sitting with hands near face.",
+          "box": [
+            169.8,
+            341.9,
+            323.6,
+            449.5
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "beige",
+          "clothing_type": "shirt",
+          "description": "Man in beige shirt covering face with hand while seated.",
+          "box": [
+            237.8,
+            292.6,
+            360.9,
+            430.3
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "blue",
+          "clothing_type": "jacket",
+          "description": "Person wearing blue jacket, seated on white chair, facing away.",
+          "box": [
+            329.0,
+            386.1,
+            517.4,
+            678.6
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, sitting with hands clasped.",
+          "box": [
+            338.3,
+            278.6,
+            415.8,
+            377.5
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wearing blue sweater, viewed from behind.",
+          "box": [
+            349.4,
+            711.8,
+            695.6,
+            1068.3
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket looking down at phone.",
+          "box": [
+            413.3,
+            266.0,
+            511.2,
+            362.3
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie leaning forward, head down.",
+          "box": [
+            498.7,
+            268.5,
+            614.4,
+            430.5
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "gray",
+          "clothing_type": "coat",
+          "description": "Man in gray coat leans over table with hand on shoulder.",
+          "box": [
+            531.3,
+            326.5,
+            676.8,
+            623.7
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person wears gray jacket and stands sideways near doorway.",
+          "box": [
+            667.0,
+            119.4,
+            715.7,
+            301.9
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table holding cup.",
+          "box": [
+            769.9,
+            281.6,
+            876.6,
+            566.2
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket sits at table, facing away.",
+          "box": [
+            816.6,
+            287.8,
+            986.9,
+            573.4
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "coat",
+          "description": "Person wears black coat, standing indoors near window.",
+          "box": [
+            900.7,
+            208.4,
+            998.5,
+            397.0
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "red",
+          "clothing_type": "jacket",
+          "description": "Person wears red jacket with white stripes, hand near mouth.",
+          "box": [
+            1182.3,
+            227.2,
+            1287.1,
+            509.5
+          ]
+        },
+        {
+          "person_idx": 14,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket with backpack, turned away from camera.",
+          "box": [
+            1775.3,
+            307.6,
+            1918.8,
+            524.0
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 15,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0003",
+      "t": 90.0,
+      "frame_path": "frames/sn_0003.jpg",
+      "people_count": 13,
+      "boxes": [
+        [
+          0.1,
+          605.7,
+          199.8,
+          1065.8
+        ],
+        [
+          165.3,
+          299.6,
+          371.5,
+          474.6
+        ],
+        [
+          168.6,
+          342.9,
+          321.7,
+          472.3
+        ],
+        [
+          240.0,
+          290.8,
+          373.0,
+          466.0
+        ],
+        [
+          332.9,
+          275.4,
+          417.0,
+          376.1
+        ],
+        [
+          351.3,
+          740.6,
+          688.1,
+          1069.7
+        ],
+        [
+          373.1,
+          438.0,
+          612.4,
+          741.0
+        ],
+        [
+          414.3,
+          265.8,
+          510.6,
+          359.8
+        ],
+        [
+          506.3,
+          258.7,
+          614.5,
+          432.1
+        ],
+        [
+          544.1,
+          327.5,
+          677.2,
+          608.2
+        ],
+        [
+          769.6,
+          282.2,
+          868.2,
+          563.6
+        ],
+        [
+          818.1,
+          311.2,
+          985.2,
+          574.5
+        ],
+        [
+          1694.1,
+          285.7,
+          1861.7,
+          669.5
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person wears gray jacket, standing near coffee dispensers.",
+          "box": [
+            0.1,
+            605.7,
+            199.8,
+            1065.8
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "gray",
+          "clothing_type": "t-shirt",
+          "description": "Man in gray t-shirt smiling while holding a drink.",
+          "box": [
+            165.3,
+            299.6,
+            371.5,
+            474.6
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "black",
+          "clothing_type": "t-shirt",
+          "description": "Person in black t-shirt sitting, holding phone.",
+          "box": [
+            168.6,
+            342.9,
+            321.7,
+            472.3
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "beige",
+          "clothing_type": "shirt",
+          "description": "Man in beige shirt sitting, hands clasped, smiling.",
+          "box": [
+            240.0,
+            290.8,
+            373.0,
+            466.0
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person wearing black sweater and cap, sitting on couch.",
+          "box": [
+            332.9,
+            275.4,
+            417.0,
+            376.1
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wearing blue sweater, seen from behind.",
+          "box": [
+            351.3,
+            740.6,
+            688.1,
+            1069.7
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wearing black jacket, leaning forward with hands on hips.",
+          "box": [
+            373.1,
+            438.0,
+            612.4,
+            741.0
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket sitting with hand on table.",
+          "box": [
+            414.3,
+            265.8,
+            510.6,
+            359.8
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, sitting with head down.",
+          "box": [
+            506.3,
+            258.7,
+            614.5,
+            432.1
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Man in gray sweater leans over laptop at table.",
+          "box": [
+            544.1,
+            327.5,
+            677.2,
+            608.2
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, holding object in hands.",
+          "box": [
+            769.6,
+            282.2,
+            868.2,
+            563.6
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, head down.",
+          "box": [
+            818.1,
+            311.2,
+            985.2,
+            574.5
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "gray",
+          "clothing_type": "hoodie",
+          "description": "Man in gray hoodie drinking from a white cup.",
+          "box": [
+            1694.1,
+            285.7,
+            1861.7,
+            669.5
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 13,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0004",
+      "t": 120.0,
+      "frame_path": "frames/sn_0004.jpg",
+      "people_count": 16,
+      "boxes": [
+        [
+          0.4,
+          598.3,
+          264.7,
+          1063.9
+        ],
+        [
+          172.8,
+          341.5,
+          334.5,
+          439.1
+        ],
+        [
+          175.1,
+          341.2,
+          271.9,
+          417.7
+        ],
+        [
+          242.7,
+          291.3,
+          356.1,
+          427.7
+        ],
+        [
+          330.7,
+          753.4,
+          633.4,
+          1069.5
+        ],
+        [
+          334.0,
+          384.3,
+          456.3,
+          565.3
+        ],
+        [
+          339.3,
+          273.5,
+          414.5,
+          369.5
+        ],
+        [
+          410.7,
+          382.5,
+          581.1,
+          756.3
+        ],
+        [
+          410.9,
+          265.0,
+          504.6,
+          366.3
+        ],
+        [
+          502.0,
+          262.3,
+          616.0,
+          425.0
+        ],
+        [
+          508.6,
+          505.1,
+          711.4,
+          1064.9
+        ],
+        [
+          541.6,
+          328.4,
+          678.9,
+          526.5
+        ],
+        [
+          770.8,
+          285.9,
+          877.8,
+          564.4
+        ],
+        [
+          817.3,
+          315.3,
+          984.7,
+          570.5
+        ],
+        [
+          932.8,
+          314.5,
+          1166.4,
+          897.0
+        ],
+        [
+          1147.7,
+          334.7,
+          1319.7,
+          763.9
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person in gray jacket stands at counter, handling items.",
+          "box": [
+            0.4,
+            598.3,
+            264.7,
+            1063.9
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person in black sweater sitting with legs crossed.",
+          "box": [
+            172.8,
+            341.5,
+            334.5,
+            439.1
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, holding phone.",
+          "box": [
+            175.1,
+            341.2,
+            271.9,
+            417.7
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "beige",
+          "clothing_type": "t-shirt",
+          "description": "Man in beige t-shirt sitting with hand on head.",
+          "box": [
+            242.7,
+            291.3,
+            356.1,
+            427.7
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wearing light blue sweater, seen from back.",
+          "box": [
+            330.7,
+            753.4,
+            633.4,
+            1069.5
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket seated, back to camera.",
+          "box": [
+            334.0,
+            384.3,
+            456.3,
+            565.3
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wears black hoodie, sitting with hands clasped.",
+          "box": [
+            339.3,
+            273.5,
+            414.5,
+            369.5
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "coat",
+          "description": "Person in black coat, back turned, standing in crowd.",
+          "box": [
+            410.7,
+            382.5,
+            581.1,
+            756.3
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man wearing black jacket, sitting with hands on table.",
+          "box": [
+            410.9,
+            265.0,
+            504.6,
+            366.3
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie leaning forward, hands on table.",
+          "box": [
+            502.0,
+            262.3,
+            616.0,
+            425.0
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "red",
+          "clothing_type": "jacket",
+          "description": "Person wears red and white puffer jacket, standing with hands clasped.",
+          "box": [
+            508.6,
+            505.1,
+            711.4,
+            1064.9
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Old man in gray sweater leans over laptop at table.",
+          "box": [
+            541.6,
+            328.4,
+            678.9,
+            526.5
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, holding phone.",
+          "box": [
+            770.8,
+            285.9,
+            877.8,
+            564.4
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, head down.",
+          "box": [
+            817.3,
+            315.3,
+            984.7,
+            570.5
+          ]
+        },
+        {
+          "person_idx": 14,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man wears black jacket with hands in pockets, standing indoors.",
+          "box": [
+            932.8,
+            314.5,
+            1166.4,
+            897.0
+          ]
+        },
+        {
+          "person_idx": 15,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket and sunglasses, standing indoors.",
+          "box": [
+            1147.7,
+            334.7,
+            1319.7,
+            763.9
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 16,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0005",
+      "t": 150.0,
+      "frame_path": "frames/sn_0005.jpg",
+      "people_count": 15,
+      "boxes": [
+        [
+          0.3,
+          619.7,
+          188.7,
+          1066.3
+        ],
+        [
+          173.2,
+          342.9,
+          334.3,
+          454.4
+        ],
+        [
+          240.2,
+          291.5,
+          356.7,
+          443.9
+        ],
+        [
+          272.5,
+          451.2,
+          597.1,
+          1066.9
+        ],
+        [
+          323.4,
+          382.5,
+          451.3,
+          629.2
+        ],
+        [
+          342.5,
+          273.6,
+          415.9,
+          372.2
+        ],
+        [
+          415.8,
+          265.1,
+          506.1,
+          365.1
+        ],
+        [
+          505.3,
+          260.1,
+          614.9,
+          433.7
+        ],
+        [
+          550.7,
+          325.0,
+          673.8,
+          622.2
+        ],
+        [
+          772.8,
+          279.1,
+          879.9,
+          564.4
+        ],
+        [
+          818.6,
+          291.4,
+          984.6,
+          572.4
+        ],
+        [
+          846.9,
+          435.2,
+          1046.4,
+          977.8
+        ],
+        [
+          864.4,
+          291.6,
+          981.7,
+          447.8
+        ],
+        [
+          1216.4,
+          263.6,
+          1355.1,
+          575.5
+        ],
+        [
+          1359.1,
+          246.5,
+          1465.3,
+          555.2
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person in gray jacket holds money and reaches toward counter.",
+          "box": [
+            0.3,
+            619.7,
+            188.7,
+            1066.3
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person in black sweater sitting with legs crossed, holding phone.",
+          "box": [
+            173.2,
+            342.9,
+            334.3,
+            454.4
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "beige",
+          "clothing_type": "shirt",
+          "description": "Man in beige shirt sitting, hand on forehead.",
+          "box": [
+            240.2,
+            291.5,
+            356.7,
+            443.9
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "blue",
+          "clothing_type": "jacket",
+          "description": "Man in blue jacket handling snacks at table.",
+          "box": [
+            272.5,
+            451.2,
+            597.1,
+            1066.9
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket sitting, head slightly bowed.",
+          "box": [
+            323.4,
+            382.5,
+            451.3,
+            629.2
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wears black hoodie, sitting with hands clasped.",
+          "box": [
+            342.5,
+            273.6,
+            415.9,
+            372.2
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket sitting, holding phone.",
+          "box": [
+            415.8,
+            265.1,
+            506.1,
+            365.1
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie leaning forward, hand on table.",
+          "box": [
+            505.3,
+            260.1,
+            614.9,
+            433.7
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Man in gray sweater sitting, head resting on hand.",
+          "box": [
+            550.7,
+            325.0,
+            673.8,
+            622.2
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, holding a cup.",
+          "box": [
+            772.8,
+            279.1,
+            879.9,
+            564.4
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person wearing black sweater, seated, facing away.",
+          "box": [
+            818.6,
+            291.4,
+            984.6,
+            572.4
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket and sunglasses, pointing downward.",
+          "box": [
+            846.9,
+            435.2,
+            1046.4,
+            977.8
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket, seated, back to camera.",
+          "box": [
+            864.4,
+            291.6,
+            981.7,
+            447.8
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "red",
+          "clothing_type": "jacket",
+          "description": "Person wears red jacket and carries white bags while walking.",
+          "box": [
+            1216.4,
+            263.6,
+            1355.1,
+            575.5
+          ]
+        },
+        {
+          "person_idx": 14,
+          "clothing_color": "black",
+          "clothing_type": "coat",
+          "description": "Person wears black coat, standing with hands in pockets.",
+          "box": [
+            1359.1,
+            246.5,
+            1465.3,
+            555.2
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 15,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0006",
+      "t": 180.0,
+      "frame_path": "frames/sn_0006.jpg",
+      "people_count": 11,
+      "boxes": [
+        [
+          0.2,
+          590.4,
+          190.9,
+          1065.5
+        ],
+        [
+          326.8,
+          384.9,
+          527.2,
+          682.5
+        ],
+        [
+          377.0,
+          199.7,
+          466.5,
+          372.0
+        ],
+        [
+          511.7,
+          175.4,
+          586.6,
+          330.5
+        ],
+        [
+          525.2,
+          717.3,
+          887.5,
+          1068.7
+        ],
+        [
+          549.1,
+          255.0,
+          685.0,
+          707.9
+        ],
+        [
+          749.9,
+          498.7,
+          998.4,
+          1013.3
+        ],
+        [
+          769.9,
+          284.8,
+          880.8,
+          568.7
+        ],
+        [
+          861.3,
+          304.1,
+          995.7,
+          527.8
+        ],
+        [
+          1239.8,
+          255.3,
+          1349.9,
+          579.4
+        ],
+        [
+          1358.8,
+          251.4,
+          1464.2,
+          558.4
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person in gray jacket standing at counter, facing away.",
+          "box": [
+            0.2,
+            590.4,
+            190.9,
+            1065.5
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket, seated with back to camera.",
+          "box": [
+            326.8,
+            384.9,
+            527.2,
+            682.5
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie gesturing with arms outstretched.",
+          "box": [
+            377.0,
+            199.7,
+            466.5,
+            372.0
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, turned slightly away.",
+          "box": [
+            511.7,
+            175.4,
+            586.6,
+            330.5
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wears blue sweater, facing away from camera.",
+          "box": [
+            525.2,
+            717.3,
+            887.5,
+            1068.7
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "gray",
+          "clothing_type": "t-shirt",
+          "description": "Person wears gray t-shirt and walks away from camera.",
+          "box": [
+            549.1,
+            255.0,
+            685.0,
+            707.9
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket and holds object in hands.",
+          "box": [
+            749.9,
+            498.7,
+            998.4,
+            1013.3
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, holding phone.",
+          "box": [
+            769.9,
+            284.8,
+            880.8,
+            568.7
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket seated, facing away from camera.",
+          "box": [
+            861.3,
+            304.1,
+            995.7,
+            527.8
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "red",
+          "clothing_type": "jacket",
+          "description": "Person wears red jacket and holds phone while walking.",
+          "box": [
+            1239.8,
+            255.3,
+            1349.9,
+            579.4
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "coat",
+          "description": "Person wears black coat, standing with hands in pockets.",
+          "box": [
+            1358.8,
+            251.4,
+            1464.2,
+            558.4
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 11,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0007",
+      "t": 210.0,
+      "frame_path": "frames/sn_0007.jpg",
+      "people_count": 15,
+      "boxes": [
+        [
+          0.1,
+          720.0,
+          116.3,
+          1066.7
+        ],
+        [
+          171.3,
+          341.5,
+          324.7,
+          467.7
+        ],
+        [
+          249.7,
+          290.7,
+          355.5,
+          431.8
+        ],
+        [
+          302.3,
+          422.1,
+          627.8,
+          1040.6
+        ],
+        [
+          321.2,
+          387.1,
+          452.2,
+          617.0
+        ],
+        [
+          330.5,
+          389.0,
+          440.2,
+          563.2
+        ],
+        [
+          334.8,
+          274.8,
+          416.4,
+          379.1
+        ],
+        [
+          422.3,
+          261.4,
+          533.9,
+          419.1
+        ],
+        [
+          516.5,
+          172.9,
+          611.4,
+          356.9
+        ],
+        [
+          568.9,
+          307.5,
+          673.1,
+          595.5
+        ],
+        [
+          728.8,
+          158.1,
+          795.1,
+          333.0
+        ],
+        [
+          770.1,
+          279.0,
+          866.6,
+          562.4
+        ],
+        [
+          835.5,
+          303.4,
+          993.9,
+          580.2
+        ],
+        [
+          1145.3,
+          229.5,
+          1265.2,
+          505.5
+        ],
+        [
+          1344.8,
+          240.1,
+          1444.7,
+          538.6
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Person wears gray sweater while holding a cup.",
+          "box": [
+            0.1,
+            720.0,
+            116.3,
+            1066.7
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person in black sweater sitting, holding phone.",
+          "box": [
+            171.3,
+            341.5,
+            324.7,
+            467.7
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "gray",
+          "clothing_type": "shirt",
+          "description": "Man in gray shirt sitting, holding phone.",
+          "box": [
+            249.7,
+            290.7,
+            355.5,
+            431.8
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person in blue sweater reaching for snacks at table.",
+          "box": [
+            302.3,
+            422.1,
+            627.8,
+            1040.6
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket sitting with back to camera.",
+          "box": [
+            321.2,
+            387.1,
+            452.2,
+            617.0
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket seated, back to camera.",
+          "box": [
+            330.5,
+            389.0,
+            440.2,
+            563.2
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, sitting with hands on lap.",
+          "box": [
+            334.8,
+            274.8,
+            416.4,
+            379.1
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "pink",
+          "clothing_type": "jacket",
+          "description": "Person in pink jacket sitting on white chair, back to camera.",
+          "box": [
+            422.3,
+            261.4,
+            533.9,
+            419.1
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket standing, head bowed, holding bottle.",
+          "box": [
+            516.5,
+            172.9,
+            611.4,
+            356.9
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Man in gray sweater holds cup, hand to face.",
+          "box": [
+            568.9,
+            307.5,
+            673.1,
+            595.5
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person walks away in black jacket and dark pants.",
+          "box": [
+            728.8,
+            158.1,
+            795.1,
+            333.0
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sits at table, hand near face.",
+          "box": [
+            770.1,
+            279.0,
+            866.6,
+            562.4
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, facing away.",
+          "box": [
+            835.5,
+            303.4,
+            993.9,
+            580.2
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "red",
+          "clothing_type": "jacket",
+          "description": "Person wears red jacket with white stripes, holding phone.",
+          "box": [
+            1145.3,
+            229.5,
+            1265.2,
+            505.5
+          ]
+        },
+        {
+          "person_idx": 14,
+          "clothing_color": "black",
+          "clothing_type": "coat",
+          "description": "Person wears black coat, standing sideways near doorway.",
+          "box": [
+            1344.8,
+            240.1,
+            1444.7,
+            538.6
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 15,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0008",
+      "t": 240.0,
+      "frame_path": "frames/sn_0008.jpg",
+      "people_count": 14,
+      "boxes": [
+        [
+          0.2,
+          644.3,
+          152.3,
+          1060.3
+        ],
+        [
+          169.2,
+          342.8,
+          325.0,
+          460.6
+        ],
+        [
+          241.5,
+          290.6,
+          370.4,
+          461.6
+        ],
+        [
+          324.4,
+          386.5,
+          508.5,
+          669.0
+        ],
+        [
+          334.3,
+          276.3,
+          411.7,
+          369.6
+        ],
+        [
+          415.8,
+          262.1,
+          470.9,
+          343.4
+        ],
+        [
+          427.9,
+          265.6,
+          548.3,
+          432.8
+        ],
+        [
+          528.1,
+          235.8,
+          607.5,
+          434.0
+        ],
+        [
+          541.2,
+          236.4,
+          608.8,
+          360.0
+        ],
+        [
+          558.3,
+          318.2,
+          675.1,
+          622.3
+        ],
+        [
+          770.0,
+          283.7,
+          876.9,
+          563.3
+        ],
+        [
+          837.2,
+          291.2,
+          986.7,
+          581.3
+        ],
+        [
+          1027.8,
+          204.3,
+          1167.9,
+          569.9
+        ],
+        [
+          1754.1,
+          514.3,
+          1919.2,
+          1064.5
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person in gray jacket holds white cup.",
+          "box": [
+            0.2,
+            644.3,
+            152.3,
+            1060.3
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person in black sweater sitting with legs crossed.",
+          "box": [
+            169.2,
+            342.8,
+            325.0,
+            460.6
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "gray",
+          "clothing_type": "t-shirt",
+          "description": "Man in gray t-shirt sitting, hand near mouth.",
+          "box": [
+            241.5,
+            290.6,
+            370.4,
+            461.6
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket, seated with back to camera.",
+          "box": [
+            324.4,
+            386.5,
+            508.5,
+            669.0
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person wearing black sweater and cap, sitting with hands clasped.",
+          "box": [
+            334.3,
+            276.3,
+            411.7,
+            369.6
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wearing black jacket, facing away, partially obscured.",
+          "box": [
+            415.8,
+            262.1,
+            470.9,
+            343.4
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "pink",
+          "clothing_type": "jacket",
+          "description": "Person in pink jacket sits on chair, back to camera.",
+          "box": [
+            427.9,
+            265.6,
+            548.3,
+            432.8
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket sitting, head turned away.",
+          "box": [
+            528.1,
+            235.8,
+            607.5,
+            434.0
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person wearing black hoodie, seated, facing away.",
+          "box": [
+            541.2,
+            236.4,
+            608.8,
+            360.0
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Man in gray sweater holding head with one hand.",
+          "box": [
+            558.3,
+            318.2,
+            675.1,
+            622.3
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting at table, facing right.",
+          "box": [
+            770.0,
+            283.7,
+            876.9,
+            563.3
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person wearing black sweater, seated at table facing away.",
+          "box": [
+            837.2,
+            291.2,
+            986.7,
+            581.3
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Man in black jacket walking while talking on phone.",
+          "box": [
+            1027.8,
+            204.3,
+            1167.9,
+            569.9
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "red",
+          "clothing_type": "jacket",
+          "description": "Person wears red and white jacket, standing with arms crossed.",
+          "box": [
+            1754.1,
+            514.3,
+            1919.2,
+            1064.5
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 14,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0009",
+      "t": 270.0,
+      "frame_path": "frames/sn_0009.jpg",
+      "people_count": 18,
+      "boxes": [
+        [
+          0.0,
+          596.1,
+          207.9,
+          1065.7
+        ],
+        [
+          173.9,
+          342.6,
+          322.0,
+          464.3
+        ],
+        [
+          233.6,
+          289.1,
+          353.4,
+          429.5
+        ],
+        [
+          266.3,
+          521.9,
+          594.9,
+          998.5
+        ],
+        [
+          310.6,
+          786.5,
+          620.5,
+          1068.5
+        ],
+        [
+          327.3,
+          386.2,
+          508.4,
+          633.9
+        ],
+        [
+          338.0,
+          277.4,
+          412.7,
+          369.1
+        ],
+        [
+          409.2,
+          265.1,
+          480.4,
+          352.4
+        ],
+        [
+          435.2,
+          270.8,
+          528.4,
+          449.1
+        ],
+        [
+          518.6,
+          247.7,
+          604.8,
+          435.1
+        ],
+        [
+          553.3,
+          335.4,
+          651.6,
+          618.6
+        ],
+        [
+          746.2,
+          435.8,
+          905.8,
+          979.3
+        ],
+        [
+          770.9,
+          284.4,
+          875.5,
+          460.8
+        ],
+        [
+          867.6,
+          316.0,
+          988.1,
+          442.9
+        ],
+        [
+          988.7,
+          142.6,
+          1034.0,
+          335.3
+        ],
+        [
+          1168.8,
+          328.7,
+          1331.7,
+          802.4
+        ],
+        [
+          1811.9,
+          572.8,
+          1919.3,
+          1067.6
+        ],
+        [
+          1821.9,
+          579.6,
+          1919.5,
+          958.3
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "hoodie",
+          "description": "Person in gray hoodie claps hands near coffee dispensers.",
+          "box": [
+            0.0,
+            596.1,
+            207.9,
+            1065.7
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting on blue couch, facing away.",
+          "box": [
+            173.9,
+            342.6,
+            322.0,
+            464.3
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "gray",
+          "clothing_type": "t-shirt",
+          "description": "Man wearing gray t-shirt, sitting with arm extended.",
+          "box": [
+            233.6,
+            289.1,
+            353.4,
+            429.5
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "multicolor",
+          "clothing_type": "shirt",
+          "description": "Man in plaid shirt holds jar while standing at counter.",
+          "box": [
+            266.3,
+            521.9,
+            594.9,
+            998.5
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wears blue sweater, seen from back, standing still.",
+          "box": [
+            310.6,
+            786.5,
+            620.5,
+            1068.5
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket, seated with back to camera.",
+          "box": [
+            327.3,
+            386.2,
+            508.4,
+            633.9
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person wearing black sweater and cap, sitting with hands clasped.",
+          "box": [
+            338.0,
+            277.4,
+            412.7,
+            369.1
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Man wearing black hoodie, seated, facing right.",
+          "box": [
+            409.2,
+            265.1,
+            480.4,
+            352.4
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "pink",
+          "clothing_type": "sweater",
+          "description": "Person wearing pink sweater, seated on a chair, facing away.",
+          "box": [
+            435.2,
+            270.8,
+            528.4,
+            449.1
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Man in black sweater sitting, looking down at phone.",
+          "box": [
+            518.6,
+            247.7,
+            604.8,
+            435.1
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "brown",
+          "clothing_type": "jacket",
+          "description": "Man in brown jacket rests head on arms on table.",
+          "box": [
+            553.3,
+            335.4,
+            651.6,
+            618.6
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie looking down at phone.",
+          "box": [
+            746.2,
+            435.8,
+            905.8,
+            979.3
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sitting, handling food item.",
+          "box": [
+            770.9,
+            284.4,
+            875.5,
+            460.8
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie sits with back to camera.",
+          "box": [
+            867.6,
+            316.0,
+            988.1,
+            442.9
+          ]
+        },
+        {
+          "person_idx": 14,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket and jeans, standing with back to camera.",
+          "box": [
+            988.7,
+            142.6,
+            1034.0,
+            335.3
+          ]
+        },
+        {
+          "person_idx": 15,
+          "clothing_color": "black",
+          "clothing_type": "coat",
+          "description": "Person wears black coat with arms crossed, standing indoors.",
+          "box": [
+            1168.8,
+            328.7,
+            1331.7,
+            802.4
+          ]
+        },
+        {
+          "person_idx": 16,
+          "clothing_color": "red",
+          "clothing_type": "sweater",
+          "description": "Person wears red and white sweater, holding object in hand.",
+          "box": [
+            1811.9,
+            572.8,
+            1919.3,
+            1067.6
+          ]
+        },
+        {
+          "person_idx": 17,
+          "clothing_color": "red",
+          "clothing_type": "sweater",
+          "description": "Person wears red sweater with white stripes, holding object.",
+          "box": [
+            1821.9,
+            579.6,
+            1919.5,
+            958.3
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 18,
+      "vlm_status": "ok"
+    },
+    {
+      "snapshot_id": "sn_0010",
+      "t": 300.0,
+      "frame_path": "frames/sn_0010.jpg",
+      "people_count": 16,
+      "boxes": [
+        [
+          0.3,
+          577.7,
+          192.4,
+          1066.6
+        ],
+        [
+          173.6,
+          342.2,
+          317.6,
+          453.5
+        ],
+        [
+          237.5,
+          289.2,
+          352.7,
+          429.6
+        ],
+        [
+          265.9,
+          786.4,
+          544.7,
+          1068.6
+        ],
+        [
+          320.1,
+          389.0,
+          470.9,
+          631.0
+        ],
+        [
+          342.5,
+          276.0,
+          411.4,
+          366.9
+        ],
+        [
+          401.6,
+          489.4,
+          600.7,
+          1067.8
+        ],
+        [
+          431.6,
+          267.9,
+          528.5,
+          443.9
+        ],
+        [
+          528.0,
+          224.8,
+          617.0,
+          424.5
+        ],
+        [
+          549.1,
+          225.6,
+          615.4,
+          355.1
+        ],
+        [
+          552.1,
+          308.2,
+          671.2,
+          616.3
+        ],
+        [
+          614.2,
+          153.4,
+          666.8,
+          324.4
+        ],
+        [
+          770.0,
+          281.9,
+          875.0,
+          561.2
+        ],
+        [
+          837.5,
+          322.4,
+          990.4,
+          579.5
+        ],
+        [
+          1072.6,
+          225.2,
+          1168.1,
+          498.5
+        ],
+        [
+          1809.1,
+          616.7,
+          1919.4,
+          1067.5
+        ]
+      ],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "gray",
+          "clothing_type": "jacket",
+          "description": "Person in gray jacket stands at counter, facing away.",
+          "box": [
+            0.3,
+            577.7,
+            192.4,
+            1066.6
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person in black sweater sitting, holding phone.",
+          "box": [
+            173.6,
+            342.2,
+            317.6,
+            453.5
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "green",
+          "clothing_type": "t-shirt",
+          "description": "Man wears green t-shirt, seated casually on couch.",
+          "box": [
+            237.5,
+            289.2,
+            352.7,
+            429.6
+          ]
+        },
+        {
+          "person_idx": 3,
+          "clothing_color": "blue",
+          "clothing_type": "sweater",
+          "description": "Person wearing light blue sweater, seen from back.",
+          "box": [
+            265.9,
+            786.4,
+            544.7,
+            1068.6
+          ]
+        },
+        {
+          "person_idx": 4,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket sits with back to camera.",
+          "box": [
+            320.1,
+            389.0,
+            470.9,
+            631.0
+          ]
+        },
+        {
+          "person_idx": 5,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Person wearing black sweater, sitting with hands clasped.",
+          "box": [
+            342.5,
+            276.0,
+            411.4,
+            366.9
+          ]
+        },
+        {
+          "person_idx": 6,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket with red logo, standing sideways.",
+          "box": [
+            401.6,
+            489.4,
+            600.7,
+            1067.8
+          ]
+        },
+        {
+          "person_idx": 7,
+          "clothing_color": "pink",
+          "clothing_type": "jacket",
+          "description": "Person in pink jacket seated, facing another person.",
+          "box": [
+            431.6,
+            267.9,
+            528.5,
+            443.9
+          ]
+        },
+        {
+          "person_idx": 8,
+          "clothing_color": "black",
+          "clothing_type": "sweater",
+          "description": "Man wears black sweater and sits with hands clasped.",
+          "box": [
+            528.0,
+            224.8,
+            617.0,
+            424.5
+          ]
+        },
+        {
+          "person_idx": 9,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket, seated, facing left.",
+          "box": [
+            549.1,
+            225.6,
+            615.4,
+            355.1
+          ]
+        },
+        {
+          "person_idx": 10,
+          "clothing_color": "gray",
+          "clothing_type": "sweater",
+          "description": "Man in gray sweater rests chin on hand while seated.",
+          "box": [
+            552.1,
+            308.2,
+            671.2,
+            616.3
+          ]
+        },
+        {
+          "person_idx": 11,
+          "clothing_color": "multicolor",
+          "clothing_type": "shirt",
+          "description": "Person wears plaid shirt and jeans, standing sideways.",
+          "box": [
+            614.2,
+            153.4,
+            666.8,
+            324.4
+          ]
+        },
+        {
+          "person_idx": 12,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person in black jacket and beanie sits at table eating.",
+          "box": [
+            770.0,
+            281.9,
+            875.0,
+            561.2
+          ]
+        },
+        {
+          "person_idx": 13,
+          "clothing_color": "black",
+          "clothing_type": "hoodie",
+          "description": "Person in black hoodie, bent over table, head down.",
+          "box": [
+            837.5,
+            322.4,
+            990.4,
+            579.5
+          ]
+        },
+        {
+          "person_idx": 14,
+          "clothing_color": "black",
+          "clothing_type": "jacket",
+          "description": "Person wears black jacket and purple pants, walking away.",
+          "box": [
+            1072.6,
+            225.2,
+            1168.1,
+            498.5
+          ]
+        },
+        {
+          "person_idx": 15,
+          "clothing_color": "red",
+          "clothing_type": "sweater",
+          "description": "Person wears red and white striped sweater, holding a can.",
+          "box": [
+            1809.1,
+            616.7,
+            1919.4,
+            1067.5
+          ]
+        }
+      ],
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "vlm_people_count": 16,
+      "vlm_status": "ok"
+    }
+  ],
+  "vlm_mode": "crops",
+  "vlm_model": "qwen3-vl-4b"
+}
