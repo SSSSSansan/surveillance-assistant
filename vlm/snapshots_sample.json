@@ -1,0 +1,142 @@
+{
+  "video_id": "sample_video_synthetic",
+  "camera_id": "SAMPLE",
+  "source": "meva",
+  "interval_sec": 30,
+  "vlm_mode": "crops",
+  "vlm_model": "qwen3-vl-4b",
+  "snapshots": [
+    {
+      "snapshot_id": "sn_0000",
+      "t": 0.0,
+      "frame_path": "frames/sn_0000.jpg",
+      "people_count": 0,
+      "boxes": [],
+      "vlm_people_count": 0,
+      "vlm_status": "ok",
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "people": []
+    },
+    {
+      "snapshot_id": "sn_0001",
+      "t": 30.0,
+      "frame_path": "frames/sn_0001.jpg",
+      "people_count": 2,
+      "boxes": [
+        [
+          176.6,
+          340.8,
+          318.7,
+          467.3
+        ],
+        [
+          1333.9,
+          252.4,
+          1505.5,
+          655.9
+        ]
+      ],
+      "vlm_people_count": 2,
+      "vlm_status": "ok",
+      "vlm_crops_skipped": [],
+      "vlm_crop_errors": [],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "red",
+          "clothing_type": "sweater",
+          "description": "red sweater, standing near the table",
+          "box": [
+            176.6,
+            340.8,
+            318.7,
+            467.3
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "unknown",
+          "clothing_type": "unknown",
+          "description": "seen from far away, clothing not clear",
+          "box": [
+            1333.9,
+            252.4,
+            1505.5,
+            655.9
+          ]
+        }
+      ]
+    },
+    {
+      "snapshot_id": "sn_0002",
+      "t": 60.0,
+      "frame_path": "frames/sn_0002.jpg",
+      "people_count": 3,
+      "boxes": [
+        [
+          318.2,
+          377.4,
+          518.1,
+          694.2
+        ],
+        [
+          339.7,
+          273.1,
+          415.2,
+          372.0
+        ],
+        [
+          1632.4,
+          340.8,
+          1830.1,
+          755.3
+        ]
+      ],
+      "vlm_people_count": 3,
+      "vlm_status": "partial",
+      "vlm_crops_skipped": [
+        1
+      ],
+      "vlm_crop_errors": [],
+      "people": [
+        {
+          "person_idx": 0,
+          "clothing_color": "green",
+          "clothing_type": "jacket",
+          "description": "green jacket, walking toward the door",
+          "box": [
+            318.2,
+            377.4,
+            518.1,
+            694.2
+          ]
+        },
+        {
+          "person_idx": 1,
+          "clothing_color": "unknown",
+          "clothing_type": "unknown",
+          "description": "too small to describe",
+          "box": [
+            339.7,
+            273.1,
+            415.2,
+            372.0
+          ]
+        },
+        {
+          "person_idx": 2,
+          "clothing_color": "blue",
+          "clothing_type": "jacket",
+          "description": "dark navy puffer jacket, sitting with back turned",
+          "box": [
+            1632.4,
+            340.8,
+            1830.1,
+            755.3
+          ]
+        }
+      ]
+    }
+  ]
+}
