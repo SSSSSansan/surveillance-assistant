@@ -22,12 +22,12 @@ def _p(type_, description, **extra):
 _FILTERS = {
     "video_id": _p(
         "string",
-        "Video identifier, e.g. 'test_video_01'. "
+        "Video identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a video; never invent one. "
         "Use this to filter events by video."
     ),
     "camera_id": _p(
         "string",
-        "Camera identifier, e.g. 'test_cam01'. "
+        "Camera identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a camera; never invent one. "
         "Use ONLY for camera filtering, never for video IDs."
     ),
     "event_type": _p(
@@ -116,8 +116,8 @@ SPECS = [
         "If the same track id exists in several videos, pass video_id.",
         {
             "track_id": _p("integer", "Person (track) id."),
-            "video_id": _p("string", "Video identifier, e.g. 'test_video_01'."),
-            "camera_id": _p("string", "Camera identifier, e.g. 'test_cam01'.")
+            "video_id": _p("string", "Video identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a video; never invent one."),
+            "camera_id": _p("string", "Camera identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a camera; never invent one.")
         },
         required=["track_id"]
     ),
@@ -153,8 +153,8 @@ SPECS = [
         "Search text descriptions of events written by the vision-language model. "
         "Use this function to find events by their visual descriptions or actions. "
         "IMPORTANT: video_id and camera_id are different identifiers. "
-        "video_id identifies a video, for example 'test_video_01'. "
-        "camera_id identifies a physical camera, for example 'test_cam01'. "
+        "video_id identifies a video (a recording). "
+        "camera_id identifies a physical camera. "
         "If the user mentions a video ID, ALWAYS pass it as video_id, "
         "NEVER as camera_id. If the user mentions a camera ID, pass it as camera_id. "
         "Do not guess identifiers. "
@@ -181,12 +181,12 @@ SPECS = [
             ),
             "video_id": _p(
                 "string",
-                "VIDEO identifier, e.g. 'test_video_01'. "
+                "VIDEO identifier from the question or earlier results; omit if unknown, never invent. "
                 "Use this when filtering by video."
             ),
             "camera_id": _p(
                 "string",
-                "CAMERA identifier, e.g. 'test_cam01'. "
+                "CAMERA identifier from the question or earlier results; omit if unknown, never invent. "
                 "Use ONLY when filtering by camera."
             ),
             "event_type": _FILTERS["event_type"]
@@ -207,13 +207,14 @@ SPECS = [
             "color": _p(
                 "string",
                 "Clothing colour in English: red, green, blue, black, white, gray, "
-                "yellow, orange, brown, pink, purple, beige."
+                "yellow, orange, brown, pink, purple, beige. Omit if the question names no colour."
             ),
             "clothing_type": _p(
                 "string",
-                "Clothing type: sweater (also hoodie, cardigan), t-shirt, shirt, jacket, coat, dress."
+                "Clothing type: sweater (also hoodie, cardigan), t-shirt, shirt, jacket, coat, dress. "
+                "Omit it if the question says just 'clothes'; never pass 'any' or 'clothes'."
             ),
-            "video_id": _p("string", "Video identifier. Omit to search all videos."),
+            "video_id": _p("string", "Video identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a video; never invent one. Omit to search all videos."),
             "t_from": _p("number", "Window start, seconds from the start of the video."),
             "t_to": _p("number", "Window end, seconds from the start of the video.")
         }
@@ -227,7 +228,7 @@ SPECS = [
         "Do not use count_events for this.",
         {
             "t": _p("number", "Moment in seconds from the start of the video (1:30 = 90)."),
-            "video_id": _p("string", "Video identifier; required if the archive has several videos.")
+            "video_id": _p("string", "Video identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a video; never invent one. Required only if the archive has several videos.")
         },
         required=["t"]
     ),
@@ -239,7 +240,7 @@ SPECS = [
         "'when were there the most people', 'what was the maximum / average number of people', "
         "'what clothes did people wear'.",
         {
-            "video_id": _p("string", "Video identifier; required if the archive has several videos.")
+            "video_id": _p("string", "Video identifier taken from the user's question or from earlier tool results. Omit it if the user did not name a video; never invent one. Required only if the archive has several videos.")
         }
     ),
 ]

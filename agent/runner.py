@@ -1,4 +1,3 @@
-
 """Agent loop: question -> model -> tool calls -> answer."""
 
 import json
@@ -62,6 +61,13 @@ Examples:
 - Was anyone in a red sweater? -> color="red", clothing_type="sweater"
 - When was someone in a green jacket? -> color="green", clothing_type="jacket"
 Pass colour and type in English (colours: red, green, blue, black, white, gray; types: sweater, t-shirt, shirt, jacket, coat).
+Russian -> English types: кофта, свитер, джемпер -> sweater; толстовка, худи -> hoodie; куртка, ветровка -> jacket;
+пальто -> coat; футболка -> t-shirt; рубашка -> shirt; платье -> dress. Never turn "кофта" into jacket.
+Russian -> English colours: красный, бордовый -> red; зелёный -> green; синий, голубой -> blue; чёрный -> black;
+белый -> white; серый -> gray; жёлтый -> yellow; оранжевый -> orange; коричневый -> brown; розовый -> pink;
+фиолетовый -> purple; бежевый -> beige.
+If the question says just "clothes" or "clothing" (for example "green clothes"), pass only color and omit clothing_type.
+If it names only a type, pass only clothing_type. Never pass "any", "all" or "clothes" as a value.
 Omit the argument you do not know; do not send empty strings.
 If found is true, start with "Да" and give the times of the matches in seconds.
 If found is false, answer "Нет, не нашёл".
@@ -85,6 +91,8 @@ ARGUMENT RULES:
 - Never use "all", "any", "all_cameras", or "unknown" as identifiers.
 - To search all event types, omit event_type.
 - To search all cameras or videos, omit camera_id and video_id.
+- Never invent video_id or camera_id. If the user did not name a video, omit video_id.
+  Do not copy identifiers from tool descriptions or earlier answers unless the user named them.
 - Do not send null arguments.
 - Do not add unnecessary filters.
 - Do not invent IDs, zones, cameras, or time limits.

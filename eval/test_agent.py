@@ -334,57 +334,7 @@ with tempfile.TemporaryDirectory() as d:
     )
 
 
-# ---------- скрипт страницы на заглушке streamlit ----------
-print("== agent/app.py на ЗАГЛУШКЕ streamlit (не настоящий Streamlit) ==")
-APP = str(Path(__file__).resolve().parents[1] / "agent" / "app.py")
-
-
-class SS(dict):
-    __getattr__ = dict.get
-    def __setattr__(self, k, v): self[k] = v
-
-
-def run_app(question, base_url, clips_root, session, click=False):
-    st = mock.MagicMock()
-    st.session_state = session
-    st.cache_resource = lambda f: f
-    st.text_input.side_effect = lambda label, value="", **kw: question if label.startswith("Вопрос") else (
-        clips_root if label.startswith("Папка") else value)
-    st.selectbox.side_effect = lambda label, options, **kw: options[0]
-    st.form_submit_button.return_value = True
-    st.button.return_value = click
-    env = {"LLM_BASE_URL": base_url, "LLM_MODEL": "oracle"}
-    with mock.patch.dict(sys.modules, {"streamlit": st}), mock.patch.dict(os.environ, env):
-        runpy.run_path(APP, run_name="__main__")
-    return st
-
-
-with fake_llm.FakeOpenAIServer(fake_llm.OracleClient(ROWS)) as srv, tempfile.TemporaryDirectory() as d:
-    (Path(d) / "clips").mkdir()
-    (Path(d) / "clips" / "test_video_01_e0013.mp4").write_bytes(b"video")
-    sess = SS()
-    st = run_app("Сколько раз кто-то входил?", srv.url, d, sess)
-    check("страница: ответ показан", any(c.args and c.args[0] == "4" for c in st.write.call_args_list), st.write.call_args_list)
-    check("страница: ошибок нет, таблицы событий для подсчёта нет", not st.error.called and not st.dataframe.called)
-    check("страница: вызовы функций показаны в expander", st.expander.called and st.code.called)
-
-    sess = SS()
-    st = run_app("Когда был оставлен предмет?", srv.url, d, sess)
-    table = st.dataframe.call_args.args[0]
-    check("страница: таблица событий со временем", table and table[0]["время"] == "95–120 с" and table[0]["event"] == "e0013", table)
-    check("страница: кнопка просмотра клипа создана", st.button.called and "e0013" in st.button.call_args.args[0])
-    check("страница: клип не показан до нажатия", not st.video.called)
-    st = run_app("Когда был оставлен предмет?", srv.url, d, sess, click=True)
-    check("страница: после нажатия показан клип из безопасной папки",
-          st.video.called and st.video.call_args.args[0].endswith("test_video_01_e0013.mp4"), st.video.call_args)
-    with tempfile.TemporaryDirectory() as empty:
-        sess2 = SS()
-        run_app("Когда был оставлен предмет?", srv.url, empty, sess2)
-        st = run_app("Когда был оставлен предмет?", srv.url, empty, sess2, click=True)
-        check("страница: клипа нет -> предупреждение, а не падение", st.warning.called and not st.video.called)
-st = run_app("Сколько раз кто-то входил?", "http://127.0.0.1:%d/v1" % free_port, d, SS())
-check("страница: модель недоступна -> сообщение об ошибке, скрипт не падает", st.error.called and "подключиться" in st.error.call_args.args[0])
-check("страница: пустой вопрос ничего не запускает", not run_app("   ", "http://127.0.0.1:1/v1", d, SS()).error.called)
+# Проверки страниц Streamlit (чат и архив, на заглушке streamlit) лежат в eval/test_design.py
 
 print(f"\nИТОГО провалов: {FAILS}")
 sys.exit(1 if FAILS else 0)

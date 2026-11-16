@@ -27,37 +27,63 @@ class _InputError(ValueError):
 
 # ---------- нормализация цвета и типа одежды ----------
 
-_RU_COLORS = [("красн", "red"), ("зелен", "green"), ("зелён", "green"), ("голуб", "light blue"),
-              ("син", "blue"), ("желт", "yellow"), ("жёлт", "yellow"), ("оранж", "orange"),
-              ("черн", "black"), ("чёрн", "black"), ("бел", "white"), ("сер", "gray"),
-              ("коричнев", "brown"), ("розов", "pink"), ("фиолет", "purple"), ("лилов", "purple"),
-              ("беж", "beige"), ("бордов", "maroon")]
-_COLOR_ALIASES = {"grey": "gray"}
+_RU_COLORS = [("красн", "red"), ("бордов", "red"), ("зелен", "green"), ("зелён", "green"),
+              ("салатов", "green"), ("оливк", "green"), ("голуб", "blue"), ("син", "blue"),
+              ("бирюз", "blue"), ("желт", "yellow"), ("жёлт", "yellow"), ("золот", "yellow"),
+              ("оранж", "orange"), ("черн", "black"), ("чёрн", "black"), ("бел", "white"),
+              ("сер", "gray"), ("серебр", "gray"), ("коричнев", "brown"), ("розов", "pink"),
+              ("фиолет", "purple"), ("лилов", "purple"), ("беж", "beige"), ("хаки", "beige"),
+              ("разноцвет", "multicolor")]
+# Те же замены, что в vlm/describe_snapshot.py (COLOR_MAP): запрос и цвет человека приводятся к одному словарю.
+_COLOR_ALIASES = {
+    "grey": "gray", "violet": "purple", "navy": "blue", "dark blue": "blue", "light blue": "blue",
+    "sky blue": "blue", "teal": "blue", "turquoise": "blue", "burgundy": "red", "maroon": "red",
+    "dark red": "red", "wine": "red", "crimson": "red", "khaki": "beige", "tan": "beige", "sand": "beige",
+    "cream": "beige", "camel": "beige", "olive": "green", "olive green": "green", "army green": "green",
+    "dark green": "green", "light green": "green", "silver": "gray", "dark gray": "gray",
+    "light gray": "gray", "charcoal": "gray", "golden": "yellow", "lavender": "purple",
+}
+# Слова, которыми модель обозначает «не важно»: это отсутствие аргумента, а не значение.
+_GENERIC = {"any", "all", "unknown", "none", "null", "clothes", "clothing", "outfit", "anything",
+            "любой", "любая", "любое", "любые", "все", "всё", "вся", "одежда", "одежду", "одежды"}
 
 # каноническое название -> синонимы. Запрос и тип человека сравниваются по каноническому названию.
 TYPE_GROUPS = {
     "sweater": ["sweater", "jumper", "cardigan", "hoodie", "sweatshirt", "pullover"],
-    "t-shirt": ["t-shirt", "tshirt", "t shirt", "tee", "tee shirt"],
-    "shirt": ["shirt", "blouse", "button-up"],
-    "jacket": ["jacket", "windbreaker", "parka", "bomber", "puffer", "down jacket"],
+    "t-shirt": ["t-shirt", "tshirt", "t shirt", "tee", "tee shirt", "tank top"],
+    "shirt": ["shirt", "blouse", "button-up", "polo"],
+    "jacket": ["jacket", "windbreaker", "parka", "bomber", "puffer", "down jacket", "blazer"],
     "coat": ["coat", "overcoat", "trench coat", "raincoat"],
     "dress": ["dress"],
+    "vest": ["vest"],
+    "uniform": ["uniform"],
 }
 _RU_TYPES = [("кофт", "sweater"), ("свитер", "sweater"), ("толстовк", "sweater"), ("худи", "sweater"),
              ("джемпер", "sweater"), ("кардиган", "sweater"), ("футболк", "t-shirt"), ("майк", "t-shirt"),
              ("рубашк", "shirt"), ("блуз", "shirt"), ("куртк", "jacket"), ("ветровк", "jacket"),
-             ("пуховик", "jacket"), ("пальт", "coat"), ("плащ", "coat"), ("плать", "dress")]
+             ("пуховик", "jacket"), ("пальт", "coat"), ("плащ", "coat"), ("плать", "dress"),
+             ("жилет", "vest"), ("форм", "uniform")]
 _CANON = {syn: name for name, syns in TYPE_GROUPS.items() for syn in syns}
 _CYR = re.compile(r"[а-яё]", re.I)
+
+
+def is_generic(value):
+    """'any', 'all', 'одежда' и т. п. значат «без фильтра»."""
+    return " ".join(value.lower().split()) in _GENERIC
 
 
 def normalize_color(value):
     v = " ".join(value.lower().replace("-", " ").split())
     if _CYR.search(v):
+        for prefix in ("темно ", "тёмно ", "светло "):
+            if v.startswith(prefix):
+                v = v[len(prefix):]
         for stem, en in _RU_COLORS:
             if v.startswith(stem):
                 return en
         return v
+    if v in _COLOR_ALIASES:
+        return _COLOR_ALIASES[v]
     return " ".join(_COLOR_ALIASES.get(w, w) for w in v.split())
 
 
@@ -176,11 +202,19 @@ def _videos(conn):
     return [r[0] for r in _rows(conn, "SELECT DISTINCT video_id FROM snapshots ORDER BY video_id")]
 
 
+def _unknown_video(video_id, vids):
+    avail = ", ".join(vids) if vids else "(archive is empty)"
+    return (f"unknown video_id '{video_id}'; available video ids: {avail}. "
+            "If the user did not name a video, call again without video_id.")
+
+
 def _pick_video(conn, video_id):
     """Возвращает (video_id, ошибка). Без video_id допустимо только одно видео с срезами."""
-    if video_id:
-        return video_id, None
     vids = _videos(conn)
+    if video_id:
+        if video_id not in vids:
+            return None, _unknown_video(video_id, vids)
+        return video_id, None
     if len(vids) == 1:
         return vids[0], None
     if not vids:
@@ -196,6 +230,10 @@ def search_by_clothing(color=None, clothing_type=None, video_id=None, t_from=Non
     color, clothing_type, video_id = (_opt_str("color", color), _opt_str("clothing_type", clothing_type),
                                       _opt_str("video_id", video_id))
     t_from, t_to = _opt_num("t_from", t_from, 0), _opt_num("t_to", t_to, 0)
+    if color is not None and is_generic(color):
+        color = None
+    if clothing_type is not None and is_generic(clothing_type):
+        clothing_type = None
     if color is None and clothing_type is None:
         raise _InputError("нужен хотя бы один из аргументов: color или clothing_type")
     if t_from is not None and t_to is not None and t_from > t_to:
@@ -203,6 +241,10 @@ def search_by_clothing(color=None, clothing_type=None, video_id=None, t_from=Non
     want_color = normalize_color(color) if color else None
     want_type = canonical_type(clothing_type) if clothing_type else None
 
+    if video_id:
+        vids = _videos(conn)
+        if video_id not in vids:
+            return {"ok": False, "error": _unknown_video(video_id, vids)}
     snaps = _load(conn, video_id, t_from, t_to)
     matches, uncertain, undescribed, people_matched = [], 0, 0, 0
     for s in snaps:

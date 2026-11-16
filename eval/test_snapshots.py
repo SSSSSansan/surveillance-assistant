@@ -1,4 +1,4 @@
-"""Тесты этапа 2: схема срезов, загрузчик snapshots.json, функции агента по срезам, помощники и страница архива.
+"""Тесты этапа 2: схема срезов, загрузчик snapshots.json, функции агента по срезам и помощники архива.
 Только SQLite и заглушки. PostgreSQL, настоящая LLM и настоящий Streamlit здесь НЕ запускались:
 страница проверяется на ЗАГЛУШКЕ модуля streamlit (ловит ошибки нашего кода, не совместимость с Streamlit).
 Запуск из корня проекта: python -m eval.test_snapshots"""
@@ -226,7 +226,7 @@ check("красная футболка: нет, и честно сказано �
       (lambda x: not x["found"] and x["uncertain_people"] == 1 and "not certain" in x["note"])(
           st_.search_by_clothing(color="red", clothing_type="t-shirt", conn=demo)))
 r = st_.search_by_clothing(color="unknown", conn=demo)
-check("'unknown' никогда не совпадает", not r["found"])
+check("'unknown' как цвет запроса = нет фильтра -> ошибка, а не ложное «нет»", r["ok"] is False and "error" in r, r)
 r = st_.search_by_clothing(color="red", video_id="", t_from="", t_to="", clothing_type="", conn=demo)
 check("пустые строки вместо отсутствующих аргументов (привычка слабых моделей) работают", r["ok"] and r["found"], r)
 for args, name in (({}, "нет color и type"), ({"color": 5}, "color не строка"), ({"color": "red", "t_from": 50, "t_to": 10}, "t_from > t_to"),
@@ -235,7 +235,19 @@ for args, name in (({}, "нет color и type"), ({"color": 5}, "color не ст
     r = st_.search_by_clothing(conn=demo, **args)
     check(f"ошибка ввода: {name}", r["ok"] is False and "error" in r, r)
 r = st_.search_by_clothing(color="red", video_id="нет_такого", conn=demo)
-check("несуществующее видео: found=false, срезов 0, пометка", r["ok"] and not r["found"] and r["snapshots_checked"] == 0 and "note" in r)
+check("несуществующее видео: ошибка со списком доступных видео (не ложное «нет»)",
+      r["ok"] is False and "unknown video_id" in r["error"] and "available video ids" in r["error"], r)
+for gen in ("any", "all", "clothes", "одежда", "Any"):
+    r = st_.search_by_clothing(color="red", clothing_type=gen, conn=demo)
+    check(f"clothing_type='{gen}' = без фильтра по типу", r["ok"] and r["found"] and r["query"]["clothing_type"] is None, r)
+r = st_.search_by_clothing(color="any", clothing_type="any", conn=demo)
+check("и цвет, и тип 'any' -> ошибка ввода", r["ok"] is False and "error" in r, r)
+check("голубой = blue, бордовый = red, тёмно-синий = blue",
+      st_.normalize_color("голубой") == "blue" and st_.normalize_color("бордовая") == "red"
+      and st_.normalize_color("тёмно-синий") == "blue" and st_.normalize_color("dark blue") == "blue")
+check("справка про примеры из описаний: 'test_video_01' не встречается в описаниях функций",
+      "test_video_01" not in json.dumps(tool_schemas.SPECS, ensure_ascii=False) and "test_cam01" not in json.dumps(tool_schemas.SPECS, ensure_ascii=False))
+check("подсказка запрещает выдумывать video_id", "Never invent video_id" in runner.SYSTEM_PROMPT)
 
 x = base_db()
 sl.load_snapshots_file(write("m.json", doc([
@@ -246,7 +258,7 @@ sl.load_snapshots_file(write("m.json", doc([
 check("цвет и тип относятся к одному человеку (красный свитер не находится)",
       not st_.search_by_clothing(color="red", clothing_type="sweater", conn=x)["found"])
 check("'blue' находит 'dark blue'", ts(st_.search_by_clothing(color="blue", conn=x)) == [0.0, 60.0])
-check("'dark blue' не находит просто 'blue'", ts(st_.search_by_clothing(color="dark blue", conn=x)) == [60.0])
+check("'dark blue' = 'blue' (как в словаре VLM)", ts(st_.search_by_clothing(color="dark blue", conn=x)) == [0.0, 60.0])
 r = st_.search_by_clothing(color="green", conn=x)
 check("неописанный срез считается и попадает в пометку", r["snapshots_not_described"] == 1 and "not certain" in r["note"], r)
 check("срез с 0 людей не считается неописанным", st_.get_snapshot_summary(conn=x)["snapshots"][3]["described"] is True
@@ -264,7 +276,7 @@ for args, name in (({}, "нет t"), ({"t": ""}, "пустой t"), ({"t": -1}, 
     r = st_.count_people_at(conn=demo, **args)
     check(f"count_people_at ошибка: {name}", r["ok"] is False and "error" in r, r)
 r = st_.count_people_at(t=10, video_id="нет_такого", conn=demo)
-check("count_people_at: видео без срезов -> found=false", r["ok"] and not r["found"] and "note" in r)
+check("count_people_at: неизвестное видео -> ошибка со списком", r["ok"] is False and "available video ids" in r["error"], r)
 
 two = base_db()
 sl.load_snapshots_file(write("v1.json", doc([snap("a", 0, 1, [person(0)])])), conn=two)
@@ -283,7 +295,7 @@ check("summary: срезы по порядку времени", [x["t"] for x in
 tie = base_db()
 sl.load_snapshots_file(write("tie.json", doc([snap("a", 0, 3, []), snap("b", 30, 1, []), snap("c", 60, 3, [])])), conn=tie)
 check("максимум в нескольких моментах: перечислены все", st_.get_snapshot_summary(conn=tie)["max_people_t"] == [0.0, 60.0])
-check("summary: видео без срезов", st_.get_snapshot_summary(video_id="нет", conn=demo)["snapshots_count"] == 0)
+check("summary: неизвестное видео -> ошибка", st_.get_snapshot_summary(video_id="нет", conn=demo)["ok"] is False)
 
 print("== схемы, call_tool, промпт, slim ==")
 for name in ("search_by_clothing", "count_people_at", "get_snapshot_summary"):
@@ -361,69 +373,7 @@ check("collect_snapshots: из matches и count_people_at, без повторо
 check("collect_snapshots не берёт весь архив из summary",
       ah.collect_snapshots([type("S", (), {"result": st_.get_snapshot_summary(conn=demo)})()]) == [])
 
-# ---------- страница архива на ЗАГЛУШКЕ streamlit ----------
-print("== agent/pages/1_Archive.py на ЗАГЛУШКЕ streamlit (не настоящий Streamlit) ==")
-PAGE = str(ROOT / "agent" / "pages" / "1_Archive.py")
-
-
-class Stop(Exception):
-    pass
-
-
-def run_page(db_mode=None, root=str(ROOT), colors=(), types=(), only_hits=True, env=None):
-    st = mock.MagicMock()
-    st.cache_resource = lambda f: f
-    st.stop.side_effect = Stop
-    st.selectbox.side_effect = lambda label, options, **kw: (db_mode if (db_mode and label == "База данных") else options[0])
-    st.text_input.side_effect = lambda label, value="", **kw: root
-
-    allcols = []
-
-    def columns(spec):
-        k = len(spec) if isinstance(spec, (list, tuple)) else spec
-        out = [mock.MagicMock() for _ in range(k)]
-        allcols.extend(out)
-        for m in out:
-            m.multiselect.side_effect = lambda label, opts, **kw: list(colors if label.startswith("Цвет") else types)
-            m.checkbox.return_value = only_hits
-        return out
-    st.columns.side_effect = columns
-    stopped = False
-    with mock.patch.dict(sys.modules, {"streamlit": st}), mock.patch.dict(os.environ, env or {}):
-        os.environ.pop("DATABASE_URL", None)
-        try:
-            runpy.run_path(PAGE, run_name="__main__")
-        except Stop:
-            stopped = True
-    st.metric_calls = [c for m in allcols for c in m.metric.call_args_list]
-    return st, stopped
-
-
-st, stopped = run_page()
-check("страница: без падений, четыре показателя", not stopped and len(st.metric_calls) == 4, st.metric_calls)
-metrics = {c.args[0]: c.args[1] for c in st.metric_calls}
-check("страница: максимум 4 человека, момент 3:00, среднее 1.6, срезов 10",
-      metrics == {"Срезов": 10, "Максимум людей": 4, "Когда больше всего": "3:00", "В среднем людей": 1.6}, metrics)
-check("страница: график построен", st.bar_chart.called)
-check("страница: показаны все 10 кадров", st.image.call_count == 10, st.image.call_count)
-check("страница: заголовок «Архив событий»", st.title.call_args.args[0] == "Архив событий")
-st, _ = run_page(colors=["red"])
-check("страница: фильтр «красный» оставляет 2 среза", st.image.call_count == 2, st.image.call_count)
-st, _ = run_page(colors=["red"], only_hits=False)
-check("страница: без «только совпадения» видны все 10, совпавшие помечены",
-      st.image.call_count == 10 and any("совпадение" in str(c) for c in st.markdown.call_args_list))
-st, _ = run_page(colors=["purple"])
-check("страница: фильтр без совпадений -> пояснение и ни одного кадра",
-      st.image.call_count == 0 and any("Совпадений нет" in str(c) for c in st.write.call_args_list))
-with tempfile.TemporaryDirectory() as empty:
-    st, _ = run_page(root=empty)
-    check("страница: кадров нет в папке -> подписи вместо падения", st.image.call_count == 0
-          and sum("Кадр не найден" in str(c) for c in st.caption.call_args_list) == 10)
-st, stopped = run_page(db_mode="PostgreSQL (DATABASE_URL)")
-check("страница: PostgreSQL без DATABASE_URL -> сообщение и остановка, без traceback",
-      stopped and st.error.called and "DATABASE_URL" in st.error.call_args.args[0], st.error.call_args)
-check("страница: HTML описаний не выводится через unsafe_allow_html без экранирования",
-      all("<script" not in str(c) for c in run_page()[0].markdown.call_args_list))
+# Страница архива (на заглушке streamlit) проверяется в eval/test_design.py
 
 print(f"\nИТОГО провалов: {FAILS}")
 sys.exit(1 if FAILS else 0)

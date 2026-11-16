@@ -19,6 +19,7 @@ STEPS = [
     "eval.test_t10_tools",
     "eval.test_agent",
     "eval.test_snapshots",
+    "eval.test_design",
 ]
 
 failed = []
