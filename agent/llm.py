@@ -32,7 +32,7 @@ class OpenAICompatClient:
     def chat(self, messages, tools=None):
         """Один запрос к модели. Возвращает сообщение ассистента (dict с content и tool_calls)."""
         if not self.model:
-            raise LLMError("не задана модель (LLM_MODEL или поле «модель»)")
+            raise LLMError("model is not set (LLM_MODEL or the «LLM: model» field)")
         payload = {"model": self.model, "messages": messages,
                    "temperature": self.temperature, "max_tokens": self.max_tokens}
         if tools:
@@ -50,17 +50,17 @@ class OpenAICompatClient:
                 body = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             detail = e.read()[:300].decode("utf-8", "replace")
-            raise LLMError(f"HTTP {e.code} от {url}: {detail}") from None
+            raise LLMError(f"HTTP {e.code} from {url}: {detail}") from None
         except urllib.error.URLError as e:
-            raise LLMError(f"не удалось подключиться к {url}: {e.reason}") from None
+            raise LLMError(f"could not connect to {url}: {e.reason}") from None
         except (socket.timeout, TimeoutError):
-            raise LLMError(f"таймаут {self.timeout} с при обращении к {url}") from None
+            raise LLMError(f"timeout after {self.timeout} s while calling {url}") from None
         except ValueError:
-            raise LLMError(f"ответ {url} не является JSON") from None
+            raise LLMError(f"the response from {url} is not JSON") from None
         try:
             msg = body["choices"][0]["message"]
             if not isinstance(msg, dict):
                 raise TypeError
         except (KeyError, IndexError, TypeError):
-            raise LLMError("неожиданный формат ответа модели (нет choices[0].message)") from None
+            raise LLMError("unexpected model response format (no choices[0].message)") from None
         return msg

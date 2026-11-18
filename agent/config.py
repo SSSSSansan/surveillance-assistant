@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_BASE_URL = "http://localhost:8000/v1"
+DEFAULT_BASE_URL = "http://localhost:11434/v1"
 
 
 def llm_base_url():

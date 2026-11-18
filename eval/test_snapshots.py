@@ -353,9 +353,9 @@ evil = {"clothing_color": "red\"><script>alert(1)</script>", "clothing_type": "<
 h = ah.chip_html(evil)
 check("chip_html экранирует текст от VLM, в style только цвет из белого списка",
       "<script" not in h and "<img" not in h and "&lt;" in h and 'style="background:#' in h and "url(" not in h, h)
-check("person_label: unknown -> понятная подпись", ah.person_label({"clothing_color": "unknown", "clothing_type": "unknown"}) == "не удалось определить"
+check("person_label: unknown -> понятная подпись", ah.person_label({"clothing_color": "unknown", "clothing_type": "unknown"}) == "could not determine"
       and ah.person_label({"clothing_color": "red", "clothing_type": "unknown"}) == "red")
-check("people_html без людей", "не описано" in ah.people_html([]))
+check("people_html без людей", "no people described" in ah.people_html([]))
 sn = st_.get_snapshot_summary(conn=demo)["snapshots"]
 cols, typs = ah.filter_options(sn)
 check("filter_options: без 'unknown', отсортированы", "unknown" not in cols + typs and cols == sorted(cols) and "red" in cols and "jacket" in typs)

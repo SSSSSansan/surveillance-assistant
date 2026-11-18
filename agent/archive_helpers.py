@@ -26,7 +26,7 @@ def color_hex(name):
 def person_label(p):
     color, typ = p.get("clothing_color") or "unknown", p.get("clothing_type") or "unknown"
     if color == "unknown" and typ == "unknown":
-        return "не удалось определить"
+        return "could not determine"
     return " ".join(x for x in (color, typ) if x != "unknown")
 
 
@@ -37,7 +37,7 @@ def chip_html(p):
 
 
 def people_html(people):
-    return "".join(chip_html(p) for p in people) or '<span class="muted">людей не описано</span>'
+    return "".join(chip_html(p) for p in people) or '<span class="muted">no people described</span>'
 
 
 def filter_options(snapshots):
@@ -128,7 +128,7 @@ def snapshot_text(s):
     descs = [(p.get("description") or person_label(p)) for p in s.get("people", [])]
     if descs:
         return "; ".join(descs)
-    return "В кадре никого нет." if s.get("people_count") == 0 else "Одежда ещё не описана (VLM)."
+    return "No one in the frame." if s.get("people_count") == 0 else "Clothing not described yet (VLM)."
 
 
 def search_snapshots(snapshots, query):
@@ -149,7 +149,7 @@ def sort_snapshots(snapshots, newest_first=True):
     return sorted(snapshots, key=lambda s: s["t"], reverse=bool(newest_first))
 
 
-def card_html(s, thumb_uri=None, matched=False, missing_text="кадр не найден"):
+def card_html(s, thumb_uri=None, matched=False, missing_text="frame not found"):
     """HTML одной карточки среза. Всё, что пришло из базы (описания от VLM, пути), экранируется;
     картинка вставляется только как data:image/..., созданная thumb_data_uri."""
     if isinstance(thumb_uri, str) and _DATA_URI.fullmatch(thumb_uri):
@@ -157,10 +157,10 @@ def card_html(s, thumb_uri=None, matched=False, missing_text="кадр не на
     else:
         img = f'<div class="noimg">{html.escape(missing_text)}</div>'
     head = (f'<span class="ts">{fmt_clock(s["t"])}</span>'
-            f'<span class="meta">{html.escape(str(s.get("snapshot_id", "")))} · {s["t"]:g} с</span>'
-            f'<span class="badge">людей: {int(s.get("people_count", 0))}</span>')
+            f'<span class="meta">{html.escape(str(s.get("snapshot_id", "")))} · {s["t"]:g} s</span>'
+            f'<span class="badge">people: {int(s.get("people_count", 0))}</span>')
     if matched:
-        head += '<span class="badge hit">совпадение</span>'
+        head += '<span class="badge hit">match</span>'
     chips = people_html(s["people"]) if s.get("people") else ""
     return (f'<div class="card{" hit" if matched else ""}"><div class="card-img">{img}</div><div class="card-body">'
             f'<div class="card-head">{head}</div><div class="card-text">{html.escape(snapshot_text(s))}</div>'

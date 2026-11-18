@@ -178,7 +178,7 @@ with fake_llm.FakeOpenAIServer(fake_llm.WrongToolClient()) as srv:
         cl.chat([{"role": "user", "content": "x"}])
         check("неверная форма ответа -> LLMError", False)
     except LLMError as e:
-        check("неверная форма ответа -> LLMError", "формат" in str(e), e)
+        check("неверная форма ответа -> LLMError", "format" in str(e), e)
 
 import socket
 s = socket.socket(); s.bind(("127.0.0.1", 0)); free_port = s.getsockname()[1]; s.close()
@@ -186,14 +186,14 @@ try:
     OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3).chat([{"role": "user", "content": "x"}])
     check("недоступный сервер -> LLMError", False)
 except LLMError as e:
-    check("недоступный сервер -> LLMError с понятным текстом", "не удалось подключиться" in str(e), e)
+    check("недоступный сервер -> LLMError с понятным текстом", "could not connect" in str(e), e)
 try:
     OpenAICompatClient(base_url="http://127.0.0.1:1/v1", model="").chat([])
     check("без модели -> LLMError", False)
 except LLMError as e:
-    check("без модели -> LLMError", "модель" in str(e))
+    check("без модели -> LLMError", "model" in str(e))
 r = runner.run_agent("q", OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3), conn)
-check("недоступная модель через run_agent -> result.error", r.error and "подключиться" in r.error)
+check("недоступная модель через run_agent -> result.error", r.error and "connect" in r.error)
 
 # ---------- грейдер ----------
 print("== грейдер ==")
@@ -274,9 +274,9 @@ steps = [types.SimpleNamespace(result={"events": [{"event_id": "e1", "video_id":
          types.SimpleNamespace(result={"ok": False, "error": "x"}), types.SimpleNamespace(result="строка")]
 ev = ui_helpers.collect_events(steps)
 check("события собраны из events/event/results без повторов, по порядку", [e["event_id"] for e in ev] == ["e1", "e2", "e3"])
-check("format_time", ui_helpers.format_time({"t_start": 12.4, "t_end": 14.0}) == "12.4–14 с"
-      and ui_helpers.format_time({"t_start": 5.0, "t_end": 5.0}) == "5 с" and ui_helpers.format_time({}) == "")
-check("event_row содержит время и описание", ui_helpers.event_row({"event_id": "e1", "t_start": 1.0, "t_end": 2.0, "vlm_description": "d"})["время"] == "1–2 с")
+check("format_time", ui_helpers.format_time({"t_start": 12.4, "t_end": 14.0}) == "12.4–14 s"
+      and ui_helpers.format_time({"t_start": 5.0, "t_end": 5.0}) == "5 s" and ui_helpers.format_time({}) == "")
+check("event_row contains time and description", ui_helpers.event_row({"event_id": "e1", "t_start": 1.0, "t_end": 2.0, "vlm_description": "d"})["time"] == "1–2 s")
 
 with tempfile.TemporaryDirectory() as d:
     root = Path(d) / "root"
