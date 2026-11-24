@@ -45,6 +45,23 @@ def vlm_counts(describer, snaps: list, frames_dir, json_dir, workers=1) -> dict:
     return dict(map(one, snaps))
 
 
+def load_counts_file(path, video_id=None) -> dict:
+    """JSONL from vlm/run_predictions.py count -> {snapshot_id: {"count", "seconds"} | None}, plus the method label."""
+    import json
+    out, label, model = {}, None, None
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if video_id and r.get("video_id") != video_id:
+                continue
+            label, model = r.get("method"), r.get("model")
+            ok = r.get("status") == "ok" and isinstance(r.get("people_count"), int)
+            out[r["snapshot_id"]] = {"count": r["people_count"], "seconds": r.get("seconds")} if ok else None
+    return out, label, model
+
+
 def score_method(gold: dict, video_id: str, counts: dict) -> dict:
     ks = sorted(k for k in gold if k[0] == video_id)
     true = [gold[k] for k in ks]
@@ -71,19 +88,26 @@ def report_md(video_id: str, results: dict, synthetic: bool) -> str:
 
 
 def run_count_benchmark(gold: dict, video_id: str, snaps: list, methods: list, describer_factory=None,
-                        frames_dir=".", json_dir=".", workers=1, model=None, yolo_weights=None, out_dir=None) -> dict:
-    """methods: subset of yolo,R2,R3,R4. describer_factory(mode_code) -> describer. Returns {name: metrics}."""
+                        frames_dir=".", json_dir=".", workers=1, model=None, yolo_weights=None, out_dir=None,
+                        precomputed=None) -> dict:
+    """methods: subset of yolo,R2,R3,R4. describer_factory(mode_code) -> describer. Returns {name: metrics}.
+    precomputed: {name: (counts, method_label, model)} from load_counts_file: no request is made and no runs.jsonl
+    line is written (the server's run_predictions.py already wrote it)."""
     d = Path(out_dir) if out_dir else RESULTS_DIR
     results, rid_group = {}, new_run_id("cnt")
     for name in methods:
         t0, started = time.perf_counter(), now_iso()
-        if name == "yolo":
+        if precomputed and name in precomputed:
+            counts, method_label, mdl = precomputed[name]
+        elif name == "yolo":
             counts, method_label, mdl = yolo_counts(snaps), "yolo", None
         else:
             describer = describer_factory(name)
             counts = vlm_counts(describer, snaps, frames_dir, json_dir, workers)
             method_label, mdl = describer.method, describer.model
         results[name] = score_method(gold, video_id, counts)
+        if precomputed and name in precomputed:
+            continue
         append_run({"run_id": f"{rid_group}_{name}", "video_id": video_id, "method": method_label, "model": mdl,
                     "mode": {"yolo": "detector", "R2": "frame-count", "R3": "frame-list", "R4": "boxes"}[name],
                     "prompt_variant": None if name == "yolo" else "A",
@@ -109,7 +133,9 @@ def main():
     ap.add_argument("--gold", required=True)
     ap.add_argument("--snapshots", required=True)
     ap.add_argument("--frames-dir", default=".")
-    ap.add_argument("--methods", default="yolo,R2,R3,R4")
+    ap.add_argument("--methods", default=None, help="default: yolo,R2,R3,R4 (or yolo + every --counts name)")
+    ap.add_argument("--counts", action="append", default=[], metavar="NAME=FILE",
+                    help="ready counts from the server, e.g. R2=count_qwen3-vl-4b_R2.jsonl (repeatable; no model needed)")
     ap.add_argument("--model", default="qwen3-vl-4b")
     ap.add_argument("--api-url", default="http://127.0.0.1:8765/v1/chat/completions")
     ap.add_argument("--disable-thinking", action="store_true")
@@ -121,12 +147,21 @@ def main():
     gold, info = load_gold_frames(a.gold, vid)
     if not gold:
         raise SystemExit(f"no gold frames for video_id {vid!r}")
-    from vlm.describers.vlm_api import VlmApiDescriber
+    pre = {}
+    for spec in a.counts:
+        name, _, path = spec.partition("=")
+        if name not in ("R2", "R3", "R4") or not path:
+            raise SystemExit(f"--counts expects R2|R3|R4=FILE, got {spec!r}")
+        pre[name] = load_counts_file(path, vid)
+    methods = [m for m in (a.methods or ("yolo," + ",".join(pre) if pre else "yolo,R2,R3,R4")).split(",") if m]
+
+    def factory(mode):
+        from vlm.describers.vlm_api import VlmApiDescriber
+        return VlmApiDescriber(a.model, a.api_url, mode, "A", a.disable_thinking)
     res = run_count_benchmark(
-        gold, vid, snaps, [m for m in a.methods.split(",") if m],
-        lambda mode: VlmApiDescriber(a.model, a.api_url, mode, "A", a.disable_thinking),
+        gold, vid, snaps, methods, factory,
         a.frames_dir, Path(a.snapshots).parent, a.workers, a.model, a.yolo_weights,
-        Path(a.out_dir) if a.out_dir else None)
+        Path(a.out_dir) if a.out_dir else None, precomputed=pre)
     print(res["_report"].read_text(encoding="utf-8"))
 
 

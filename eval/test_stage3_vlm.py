@@ -310,31 +310,161 @@ def test_server_scripts_syntax(script):
 
 
 def _fake_home(tmp_path):
-    target = tmp_path / ".cache/huggingface/hub/models--Qwen--Qwen3-VL-4B-Instruct"
-    other = tmp_path / ".cache/huggingface/hub/models--Other--Keep"
-    for d in (target, other):
+    w = tmp_path / "work"
+    slug = "models--Qwen--Qwen3-VL-4B-Instruct"
+    mine = [w / "hf_cache/hub" / slug, w / "cache/vllm" / slug, w / "cache/triton" / slug, w / "cache/inductor" / slug]
+    keep = [w / "hf_cache/hub/models--Other--Keep", w / "cache/vllm/models--Other--Keep", w / "data", w / "runs"]
+    for d in mine + keep:
         d.mkdir(parents=True)
-        (d / "w.bin").write_text("x")
-    return target, other
+        (d / "f.bin").write_text("x")
+    return mine, keep
 
 
-def _cleanup(tmp_path, answer, repo="Qwen/Qwen3-VL-4B-Instruct"):
-    return subprocess.run(["bash", str(ROOT / "vlm/server/cleanup.sh"), repo], input=answer, capture_output=True, text=True,
+def _cleanup(tmp_path, answer, *args):
+    return subprocess.run(["bash", str(ROOT / "vlm/server/cleanup.sh"), *(args or ("Qwen/Qwen3-VL-4B-Instruct",))],
+                          input=answer, capture_output=True, text=True,
                           env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "CLEANUP_NO_KILL": "1"})
 
 
 def test_cleanup_refuses_without_confirmation(tmp_path):
-    target, other = _fake_home(tmp_path)
+    mine, keep = _fake_home(tmp_path)
     r = _cleanup(tmp_path, "no\n")
-    assert r.returncode != 0 and "ничего не удалено" in r.stdout.lower() and target.exists() and other.exists()
+    assert r.returncode != 0 and "ничего не удалено" in r.stdout.lower() and all(d.exists() for d in mine + keep)
 
 
-def test_cleanup_deletes_only_the_named_model(tmp_path):
-    target, other = _fake_home(tmp_path)
+def test_cleanup_deletes_only_the_named_model_everywhere(tmp_path):
+    mine, keep = _fake_home(tmp_path)
     r = _cleanup(tmp_path, "yes\n")
-    assert r.returncode == 0 and not target.exists() and other.exists()
+    assert r.returncode == 0 and not any(d.exists() for d in mine) and all(d.exists() for d in keep)
 
 
 def test_cleanup_rejects_bad_repo_name(tmp_path):
-    _fake_home(tmp_path)
-    assert _cleanup(tmp_path, "yes\n", "../../etc").returncode == 2
+    mine, _ = _fake_home(tmp_path)
+    assert _cleanup(tmp_path, "yes\n", "../../etc").returncode == 2 and all(d.exists() for d in mine)
+
+
+def test_cleanup_all_needs_exact_word_and_only_removes_work(tmp_path):
+    mine, keep = _fake_home(tmp_path)
+    (tmp_path / "other.txt").write_text("keep")
+    r = _cleanup(tmp_path, "yes\n", "--all")  # wrong word
+    assert r.returncode != 0 and (tmp_path / "work").exists()
+    r = _cleanup(tmp_path, "delete-work\n", "--all")
+    assert r.returncode == 0 and not (tmp_path / "work").exists() and (tmp_path / "other.txt").exists()
+
+
+def test_cleanup_all_refuses_foreign_work_path(tmp_path):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    r = subprocess.run(["bash", str(ROOT / "vlm/server/cleanup.sh"), "--all"], input="delete-work\n", capture_output=True,
+                       text=True, env={"HOME": str(tmp_path), "WORK": str(other), "PATH": "/usr/bin:/bin", "CLEANUP_NO_KILL": "1"})
+    assert r.returncode == 2 and other.exists()
+
+
+def _serve(*args, env=None):
+    e = {"HOME": "/h", "PATH": "/usr/bin:/bin"}
+    e.update(env or {})
+    return subprocess.run(["bash", str(ROOT / "vlm/server/serve_v1_qwen3vl4b.sh"), *args], capture_output=True, text=True, env=e)
+
+
+def test_serve_print_defaults_gpu1_caches_and_util():
+    r = _serve("--print")
+    out = r.stdout
+    assert r.returncode == 0 and "--gpu-memory-utilization 0.40" in out and "--port 8765" in out and "GPU=1" in out
+    assert "HF_HOME=/h/work/hf_cache" in out and "XDG_CACHE_HOME=/h/work/cache" in out
+    assert "TRITON_CACHE_DIR=/h/work/cache/triton/" in out and "VLLM_CACHE_ROOT=/h/work/cache/vllm/" in out
+    assert "--gpu-memory-utilization 0.35" in _serve("--print", "--gpu-memory-utilization", "0.35").stdout
+    assert _serve("--print", "--gpu-memory-utilization", "1.5").returncode == 2
+
+
+def test_serve_refuses_busy_port():
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.listen(1)
+    try:
+        r = _serve("--print", env={"PORT": str(s.getsockname()[1])})
+        assert r.returncode == 1 and "занят" in r.stdout and "vllm serve" not in r.stdout
+    finally:
+        s.close()
+
+
+# ------------------------------------- server-side runner: isolated copy ---
+def test_server_runner_in_isolated_copy_feeds_local_benchmarks(tmp_path):
+    """Copy ONLY the files meant for the server into a clean folder, run run_predictions.py there (no repo on the
+    path, python -I), then score the output with the local benchmarks."""
+    import shutil
+    import sys
+    srv = tmp_path / "vlm"
+    (srv / "describers").mkdir(parents=True)
+    for f in ("prompts.py", "describe_snapshot.py", "imgutil.py", "run_predictions.py", "fewshot.json", "check_fewshot.py"):
+        shutil.copy(ROOT / "vlm" / f, srv / f)
+    for f in ("__init__.py", "base.py", "vlm_api.py"):
+        shutil.copy(ROOT / "vlm/describers" / f, srv / "describers" / f)
+    proj = _make_project(tmp_path / "proj") if (tmp_path / "proj").mkdir() is None else None
+    runs = tmp_path / "runs"
+    with FakeVlmServer(_handler) as s:
+        base = [sys.executable, "-I", str(srv / "run_predictions.py")]
+        common = ["--snapshots", str(proj / "snapshots.json"), "--frames-dir", str(proj / "frames"), "--model", "fake",
+                  "--api-url", s.url, "--workers", "2"]
+        r1 = subprocess.run(base + ["crops", *common, "--variant", "A", "--repeat", "2", "--out", str(runs / "pc.jsonl")],
+                            capture_output=True, text=True, cwd=tmp_path)
+        r2 = subprocess.run(base + ["count", *common, "--mode", "R2", "--out", str(runs / "cnt_R2.jsonl")],
+                            capture_output=True, text=True, cwd=tmp_path)
+    assert r1.returncode == 0, r1.stderr
+    assert r2.returncode == 0, r2.stderr
+    assert (runs / "pc.jsonl").exists() and (runs / "pc_repeat2.jsonl").exists()
+    run_lines = [json.loads(x) for x in (runs / "runs.jsonl").read_text().splitlines()]
+    assert [r["mode"] for r in run_lines] == ["crop", "frame-count"] and run_lines[0]["prompt_variant"] == "A"
+    # local scoring of the files
+    gold, info = bc.load_gold_people(proj / "gold_people.csv")
+    preds = bench_clothing.load_predictions(runs / "pc.jsonl")
+    rep = bench_clothing.load_predictions(runs / "pc_repeat2.jsonl")
+    res = bench_clothing.run_benchmark(gold, info, "synthetic_e2e", predictions=preds, repeat_predictions=rep,
+                                       method="vlm:fake", out_dir=tmp_path / "res")
+    assert res["metrics"]["color_acc"] == 0.5 and res["metrics"]["repeat_color_disagree"] == 0
+    assert not (tmp_path / "res" / "runs.jsonl").exists()  # scoring ready predictions must not invent a run
+    vid, snaps, _ = bc.load_snapshots(proj / "snapshots.json")
+    gf, _ = bc.load_gold_frames(proj / "gold_frames.csv", vid)
+    pre = {"R2": bench_count.load_counts_file(runs / "cnt_R2.jsonl", vid)}
+    out = bench_count.run_count_benchmark(gf, vid, snaps, ["yolo", "R2"], None, precomputed=pre, out_dir=tmp_path / "res2")
+    assert out["R2"]["pred"] == [3] and out["R2"]["mae"] == 2 and out["yolo"]["pred"] == [2]
+    assert not (tmp_path / "res2" / "runs.jsonl").read_text().count("frame-count")  # only yolo logged locally
+
+
+def test_server_runner_marks_failures_and_missing_frames(tmp_path):
+    import sys
+    proj = tmp_path / "p"
+    proj.mkdir()
+    _make_project(proj)
+    snaps = json.loads((proj / "snapshots.json").read_text())
+    snaps["snapshots"][0]["frame_path"] = "frames/missing.jpg"
+    (proj / "snapshots.json").write_text(json.dumps(snaps))
+    with FakeVlmServer(_handler) as s:
+        r = subprocess.run([sys.executable, "-I", str(ROOT / "vlm/run_predictions.py"), "crops", "--snapshots", str(proj / "snapshots.json"),
+                            "--frames-dir", str(proj / "frames"), "--model", "f", "--api-url", s.url, "--out", str(tmp_path / "o/p.jsonl")],
+                           capture_output=True, text=True)
+    rows = [json.loads(x) for x in (tmp_path / "o/p.jsonl").read_text().splitlines()]
+    assert r.returncode == 0 and len(rows) == 2 and all(x["record"] is None and "frame not found" in x["error"] for x in rows)
+
+
+def test_exclude_fewshot_sources_from_gold(tmp_path):
+    gold = {("v", "s1", 0): {}, ("v", "s1", 1): {}, ("v", "s2", 0): {}}
+    fs = tmp_path / "fs.json"
+    fs.write_text(json.dumps({"examples": [{"image": "x", "source": {"video_id": "v", "snapshot_id": "s1", "person_idx": 1}},
+                                           {"image": "y"}]}))
+    assert set(bench_clothing.exclude_fewshot(gold, fs)) == {("v", "s1", 0), ("v", "s2", 0)}
+
+
+def test_check_fewshot_script(tmp_path):
+    import sys
+    chk = str(ROOT / "vlm/check_fewshot.py")
+    assert subprocess.run([sys.executable, chk], capture_output=True).returncode == 1  # empty template
+    (tmp_path / "a.jpg").write_bytes(b"x")
+    ex = {"image": "a.jpg", "clothing_color": "red", "clothing_type": "coat", "description": "d",
+          "source": {"video_id": "v", "snapshot_id": "s", "person_idx": 0}}
+    good = tmp_path / "f.json"
+    good.write_text(json.dumps({"examples": [ex, ex, ex]}))
+    assert subprocess.run([sys.executable, chk, str(good)], capture_output=True).returncode == 0
+    bad = tmp_path / "g.json"
+    bad.write_text(json.dumps({"examples": [{**ex, "clothing_color": "navy"}, ex]}))
+    assert subprocess.run([sys.executable, chk, str(bad)], capture_output=True).returncode == 1

@@ -14,6 +14,7 @@ _pred.jsonl, one row appended to clothing_summary.csv, one line appended to runs
 """
 import argparse
 import json
+from pathlib import Path
 import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -178,6 +179,14 @@ def save_outputs(meta: dict, m: dict, preds: dict, out_dir=None) -> dict:
     return paths
 
 
+def exclude_fewshot(gold: dict, fewshot_path) -> dict:
+    """Remove the crops used as few-shot examples (their `source`) from the gold: they must not be scored."""
+    ex = json.loads(Path(fewshot_path).read_text(encoding="utf-8")).get("examples", [])
+    drop = {(e["source"]["video_id"], e["source"]["snapshot_id"], int(e["source"]["person_idx"]))
+            for e in ex if isinstance(e.get("source"), dict) and {"video_id", "snapshot_id", "person_idx"} <= set(e["source"])}
+    return {k: v for k, v in gold.items() if k not in drop}
+
+
 def load_predictions(path) -> dict:
     preds = {}
     with open(path, encoding="utf-8") as f:
@@ -190,7 +199,7 @@ def load_predictions(path) -> dict:
 
 
 def run_benchmark(gold: dict, gold_info: dict, video_id: str, describer=None, items=None, predictions=None,
-                  method=None, mode="crop", prompt_variant="A", repeat=1, workers=1, out_dir=None, params=None) -> dict:
+                  repeat_predictions=None, method=None, mode="crop", prompt_variant="A", repeat=1, workers=1, out_dir=None, params=None) -> dict:
     """Core entry (also used by tests). Give a describer + items, OR ready predictions."""
     run_id, started, t0 = new_run_id("clo"), now_iso(), time.perf_counter()
     repeat_preds = None
@@ -203,13 +212,14 @@ def run_benchmark(gold: dict, gold_info: dict, video_id: str, describer=None, it
                 gold[it["key"]]["box_h"] = it["box_h"]
         method, mode, prompt_variant = describer.method, describer.mode, describer.prompt_variant
     else:
-        preds = predictions
+        preds, repeat_preds = predictions, repeat_predictions
     m = score(gold, preds, repeat_preds)
     m["gold_info"] = gold_info
     meta = {"run_id": run_id, "video_id": video_id, "method": method, "mode": mode,
             "prompt_variant": prompt_variant, "synthetic": is_synthetic(video_id)}
     paths = save_outputs(meta, m, preds, out_dir)
-    append_run({**meta, "model": getattr(describer, "model", None), "weights": None, "started_at": started,
+    if predictions is None:  # ready predictions: runs.jsonl comes from whoever produced them (the server)
+      append_run({**meta, "model": getattr(describer, "model", None), "weights": None, "started_at": started,
                 "duration_sec": round(time.perf_counter() - t0, 2),
                 "params": {"bench": "clothing", "repeat": repeat, "workers": workers, **(params or {})}}, out_dir)
     return {"meta": meta, "metrics": m, "paths": paths}
@@ -222,6 +232,8 @@ def main():
     ap.add_argument("--frames-dir", default=".")
     ap.add_argument("--crops-index", default=None)
     ap.add_argument("--predictions", default=None)
+    ap.add_argument("--predictions-repeat", default=None, help="second pass (…_repeat2.jsonl) for the repeatability metric")
+    ap.add_argument("--exclude-fewshot", default=None, help="vlm/fewshot.json: drop its source crops from the gold (fair scoring)")
     ap.add_argument("--method-name", default=None, help="with --predictions: name of the method")
     ap.add_argument("--model", default="qwen3-vl-4b")
     ap.add_argument("--api-url", default="http://127.0.0.1:8765/v1/chat/completions")
@@ -235,7 +247,6 @@ def main():
     ap.add_argument("--out-dir", default=None)
     a = ap.parse_args()
 
-    from pathlib import Path
     vid = a.video_id
     snaps, json_dir = [], Path(".")
     if a.snapshots:
@@ -243,6 +254,8 @@ def main():
         vid, json_dir = vid or sv, Path(a.snapshots).parent
     excl = tuple(x for x in a.exclude_visible.split(",") if x)
     gold, info = load_gold_people(a.gold, vid, excl)
+    if a.exclude_fewshot:
+        gold = exclude_fewshot(gold, a.exclude_fewshot)
     if a.limit:
         gold = {k: gold[k] for k in sorted(gold)[:a.limit]}
     if not gold:
@@ -251,6 +264,7 @@ def main():
     out_dir = Path(a.out_dir) if a.out_dir else None
     if a.predictions:
         res = run_benchmark(gold, info, vid, predictions=load_predictions(a.predictions),
+                            repeat_predictions=load_predictions(a.predictions_repeat) if a.predictions_repeat else None,
                             method=a.method_name or "external", out_dir=out_dir)
     else:
         if not a.snapshots and not a.crops_index:
