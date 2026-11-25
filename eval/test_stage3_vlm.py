@@ -951,3 +951,139 @@ def test_bench_common_crops_index_real_schema_full_crop_kept_and_one_video(tmp_p
         vid = rows[0]["video_id"]
         got = load_crops_index(p, vid)
         assert len(got) == sum(1 for c in rows if c["kept"]) and all(Path(v["crop_path"]).parent == p.parent for v in got.values())
+
+
+def test_summarize_runs_unknown_type_both_repeat_and_last_run_from_log(tmp_path):
+    from eval import summarize_runs as S
+
+    def crop(i, color, typ):
+        return {"video_id": "v", "snapshot_id": "sn_0000", "person_idx": i, "status": "ok", "seconds": 1.0,
+                "finish_reason": "stop", "record": {"color": color, "type": typ}}
+    _jl(tmp_path / "pred_clothing_m_R1_A.jsonl", [crop(0, "red", "coat"), crop(1, "blue", "unknown"),
+                                                 crop(2, "black", "jacket"), crop(3, "unknown", "unknown")])
+    # repeat: person 0 same, 1 color differs, 2 type differs, 3 both same -> color 3/4, type 3/4, both 2/4
+    _jl(tmp_path / "pred_clothing_m_R1_A_repeat2.jsonl", [crop(0, "red", "coat"), crop(1, "gray", "unknown"),
+                                                         crop(2, "black", "coat"), crop(3, "unknown", "unknown")])
+    _jl(tmp_path / "count_m_R4.jsonl", [{"video_id": "v", "snapshot_id": "sn_0000", "status": "ok",
+                                        "people_count": 5, "suspicious": False, "finish_reason": "stop"}])
+    log = [{"run_id": rid, "video_id": vid, "started_at": t, "duration_sec": d, "params": {"out": "/srv/runs2/" + f}}
+           for rid, t, d, f in (("new", "2026-11-25T11:07:38", 237.0, "count_m_R4.jsonl"),
+                                ("old", "2026-11-25T10:13:35", 0.68, "count_m_R4.jsonl"),
+                                ("clo", "2026-11-25T09:00:00", 10.0, "pred_clothing_m_R1_A.jsonl"))
+           for vid in ("v", "w")]  # one log line per video of a run: not a duplicate run
+    _jl(tmp_path / "runs.jsonl", log)
+    rows = {r["mode"]: r for r in S.collect(tmp_path)}
+    a = rows["R1"]
+    assert a["unknown_share"] == 0.25 and a["unknown_type_share"] == 0.5
+    assert (a["repeat_color_same"], a["repeat_type_same"], a["repeat_both_same"]) == (0.75, 0.75, 0.5)
+    assert a["run_id"] == "clo" and a["superseded_runs"] == 0
+    c = rows["R4"]
+    assert c["run_id"] == "new" and c["started_at"] == "2026-11-25T11:07:38" and c["superseded_runs"] == 1
+    md = S.to_markdown(list(rows.values()))
+    assert "повтор цвет+тип" in md and "unknown тип" in md and "старых прогонов" in md
+
+
+# ---------------------------------------------------------- summarize_counts ---
+V1, V2 = "2018-03-15.vid1", "2018-03-07.vid2"
+
+
+def _counts_project(tmp_path):
+    """Two videos with the SAME sn_0000/sn_0001, two labelers, frames indices and three count files."""
+    g = tmp_path / "gold"
+    g.mkdir()
+    head = "video_id,snapshot_id,true_people_count,labeler\n"
+    (g / "gold_frames_a.csv").write_text(head + f"{V1},sn_0000,10,A\n{V1},sn_0001,12,A\n{V2},sn_0000,5,A\n{V2},sn_0001,7,A\n")
+    (g / "gold_frames_b.csv").write_text(head + f"{V1},sn_0000,10,B\n{V1},sn_0001,14,B\n{V2},sn_0000,6,B\n{V2},sn_0001,7,B\n")
+    (g / "gold_frames_c.csv").write_text(head + f"{V1},sn_0000,,C\n")  # empty labeler, like Aray
+    for name, vid, frames in (("video1", V1, ((10, 9), (13, 12))), ("video2", V2, ((7, 6), (7, 7)))):
+        d = tmp_path / name
+        d.mkdir()
+        (d / f"{name}_frames_index.json").write_text(json.dumps(
+            [{"video_id": vid, "snapshot_id": f"sn_000{i}", "people_count": r, "people_after_dedup": dd}
+             for i, (r, dd) in enumerate(frames)]))
+    runs = tmp_path / "runs"
+    runs.mkdir()
+
+    def line(vid, sid, n, status="ok", susp=False):
+        return {"video_id": vid, "snapshot_id": sid, "status": status, "people_count": n, "suspicious": susp}
+    # truth (lower median): V1 sn_0000=10, sn_0001=12; V2 sn_0000=5, sn_0001=7
+    _jl(runs / "count_m_R3.jsonl", [line(V1, "sn_0000", 9), line(V1, "sn_0001", None, "truncated"),
+                                   line(V2, "sn_0000", 5), line(V2, "sn_0001", None, "error")])
+    _jl(runs / "count_m_R3_rep1.1.jsonl", [line(V1, "sn_0000", 7), line(V1, "sn_0001", 10),
+                                          line(V2, "sn_0000", 4), line(V2, "sn_0001", 0, susp=True)])
+    _jl(runs / "count_m_R2.jsonl", [line(V1, "sn_0000", 11), line(V1, "sn_0001", 12),
+                                   line(V2, "sn_0000", 5), line(V2, "sn_0001", 9)])
+    return g, tmp_path, runs
+
+
+def test_summarize_counts_statuses_per_video_ceiling_and_tagged_pair(tmp_path):
+    from eval import summarize_counts as SC
+    g, root, runs = _counts_project(tmp_path)
+    md, t = SC.build([str(g / "gold_frames_*.csv")], [str(root / "video*/video*_frames_index.json")],
+                     [str(runs / "count_*.jsonl")])
+    # a) statuses
+    st = t["files"]
+    assert st["count_m_R3"] == {"frames": 4, "ok": 2, "truncated": 1, "error": 1, "suspicious": 0, "used": 2,
+                                "duplicate_keys": 0}
+    assert st["count_m_R3_rep1.1"]["suspicious"] == 1 and st["count_m_R3_rep1.1"]["used"] == 3
+    # gold: lower median of two labelers, the empty labeler C is ignored, videos are not glued
+    assert t["truth"] == {(V1, "sn_0000"): 10, (V1, "sn_0001"): 12, (V2, "sn_0000"): 5, (V2, "sn_0001"): 7}
+    # b) R2 errors: V1 +1, 0; V2 0, +2
+    b = t["b"]
+    assert b[("count_m_R2", V1)] == {"n": 2, "mae": 0.5, "exact": 0.5, "bias": 0.5}
+    assert b[("count_m_R2", V2)] == {"n": 2, "mae": 1.0, "exact": 0.5, "bias": 1.0}
+    assert b[("count_m_R2", None)] == {"n": 4, "mae": 0.75, "exact": 0.5, "bias": 0.75}
+    assert b[("YOLO без дублей", None)]["n"] == 4 and b[("YOLO сырой", V1)]["bias"] == 0.5  # 10-10, 13-12
+    assert b[("count_m_R3", None)]["n"] == 2  # truncated / error lines are not scored
+    # c) ceiling A vs B: V1 diffs on sn_0001 (12 vs 14), V2 on sn_0000 (5 vs 6), with the video
+    (ag,) = t["c"]
+    assert (ag["a"], ag["b"]) == ("A", "B")
+    assert ag["diffs"] == [(V2, "sn_0000", 5, 6), (V1, "sn_0001", 12, 14)]
+    assert ag["per_video"][V1]["mae"] == 1.0 and ag["per_video"][V2]["mae"] == 0.5 and ag["all"]["exact"] == 0.5
+    assert "| video2 | sn_0000 | 5 | 6 | 5 |" in md and "| video1 | sn_0001 | 12 | 14 | 12 |" in md
+    # d) R3 vs R3_rep1.1: common ok frames V1 sn_0000 (9 -> 7) and V2 sn_0000 (5 -> 4): shift -1.5
+    (d,) = t["d"]
+    assert (d["base"], d["tagged"], d["common"], d["shift"]) == ("count_m_R3", "count_m_R3_rep1.1", 2, -1.5)
+    assert d["ok_base"] == 0.5 and d["ok_tagged"] == 1.0
+
+
+def test_summarize_counts_same_numbers_as_score_methods(tmp_path):
+    """The gold rule and the line filter must agree with eval.score_methods count (it keeps them inline)."""
+    import re
+    import sys as _sys
+    from eval import summarize_counts as SC
+    g, root, runs = _counts_project(tmp_path)
+    cases = [([str(g / "gold_frames_*.csv")], [str(root / "video*/video*_frames_index.json")],
+              [str(runs / "count_*.jsonl")])]
+    real_idx = sorted(ROOT.glob("arai_data/video*/video*_frames_index.json"))
+    real_runs = sorted((ROOT / "server_runs2").glob("count_*.jsonl"))
+    if real_idx and real_runs:
+        cases.append(([str(ROOT / "eval/gold/gold_frames_*.csv")], [str(p) for p in real_idx],
+                      [str(ROOT / "server_runs2/count_*.jsonl")]))
+    for gold, idx, vlm in cases:
+        out = subprocess.run([_sys.executable, "-m", "eval.score_methods", "count", "--gold", *gold,
+                              "--frames-index", *idx, "--vlm-counts", *vlm], cwd=ROOT, capture_output=True,
+                             text=True, encoding="utf-8")
+        assert out.returncode == 0, out.stderr
+        theirs = {m.group(1): (float(m.group(2)), float(m.group(3))) for m in re.finditer(
+            r"\*\*(count_[^*]+)\*\* \(кадров \d+.*?MAE: ([\d.]+).*?средняя ошибка со знаком: ([+-][\d.]+)", out.stdout)}
+        _, t = SC.build(gold, idx, vlm)
+        ours = {n: (round(s["mae"], 2), round(s["bias"], 2)) for (n, v), s in t["b"].items()
+                if v is None and s and n.startswith("count_")}
+        assert theirs and ours == theirs
+
+
+def test_summarize_counts_cli_writes_md_and_flags_duplicate_keys(tmp_path):
+    from eval import summarize_counts as SC
+    g, root, runs = _counts_project(tmp_path)
+    _jl(runs / "count_m_R4.jsonl", [{"video_id": V1, "snapshot_id": "sn_0000", "status": "ok", "people_count": 1},
+                                   {"video_id": V1, "snapshot_id": "sn_0000", "status": "ok", "people_count": 2}])
+    out = tmp_path / "o/count_summary.md"
+    assert SC.main(["--gold", str(g / "gold_frames_*.csv"), "--frames-index",
+                    str(root / "video*/video*_frames_index.json"), "--vlm-counts", str(runs / "count_*.jsonl"),
+                    "--out-md", str(out)]) == 0
+    md = out.read_text(encoding="utf-8")
+    assert "### а)" in md and "### б)" in md and "### в)" in md and "### г)" in md
+    assert "ВНИМАНИЕ: в count_m_R4 повторяются ключи" in md
+    with pytest.raises(SystemExit, match="ни одной заполненной"):
+        SC.build([str(g / "gold_frames_c.csv")], [str(root / "video*/video*_frames_index.json")], [])

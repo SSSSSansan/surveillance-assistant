@@ -15,9 +15,13 @@ holds several videos with the SAME snapshot_id / crop_id (sn_0000 is in both): i
 repeatability pairs are matched on (video_id, snapshot_id, person_idx), never on snapshot_id alone.
     rows, ok / truncated / error shares (error = everything that is neither ok nor truncated: error, skipped;
     the three shares add up to 1), mean and p95 of seconds (lines with seconds only),
-    R1: black and unknown shares of color (among ok lines), repeatability vs *_repeat2 (share of the same color and
-        the same type, among people that are ok in both passes),
+    R1: black share, unknown share of color and of type (among ok lines), repeatability vs *_repeat2 (share of the
+        same color, of the same type and of both at once, among people that are ok in both passes),
     count: mean, standard deviation, min and max of people_count (ok lines), number of suspicious lines.
+runs.jsonl (the run log) is read too, if it is there: every prediction file is matched to its LAST run by
+started_at (the same file can be logged several times: one line per video, re-runs after a failure). The file on
+disk is what the last run wrote, so its run_id / started_at go to the row, and the earlier runs of the same file are
+counted in "superseded_runs" and listed on stderr (they are not summed in anywhere).
 Old files (before raw_response / finish_reason / suspicious existed) are read without errors: format = old,
 suspicious = empty (unknown, NOT 0). In old files a cut answer was recorded as error, so truncated = 0 there
 does not mean "nothing was cut".
@@ -38,15 +42,17 @@ RE_COUNT = re.compile(r"^count_(?P<model>.+)_(?P<mode>R[234])(?P<rest>.*)\.jsonl
 RE_REPEAT = re.compile(r"_repeat(\d+)")
 
 COLUMNS = ["model", "mode", "variant", "tag", "video_id", "file", "format", "rows", "ok_share", "truncated_share", "error_share",
-           "sec_mean", "sec_p95", "black_share", "unknown_share", "repeat_pairs", "repeat_color_same",
-           "repeat_type_same", "count_mean", "count_std", "count_min", "count_max", "suspicious", "bad_lines"]
+           "sec_mean", "sec_p95", "black_share", "unknown_share", "unknown_type_share", "repeat_pairs",
+           "repeat_color_same", "repeat_type_same", "repeat_both_same", "count_mean", "count_std", "count_min", "count_max", "suspicious", "bad_lines",
+           "run_id", "started_at", "superseded_runs"]
 HEADERS = {"model": "модель", "mode": "режим", "variant": "вариант", "tag": "метка", "video_id": "видео", "file": "файл",
            "format": "формат", "rows": "строк", "ok_share": "ok", "truncated_share": "truncated",
            "error_share": "ошибка", "sec_mean": "сек ср.", "sec_p95": "сек p95", "black_share": "black",
-           "unknown_share": "unknown", "repeat_pairs": "пар повтора", "repeat_color_same": "повтор цвет",
-           "repeat_type_same": "повтор тип", "count_mean": "people ср.", "count_std": "people СКО",
+           "unknown_share": "unknown цвет", "unknown_type_share": "unknown тип", "repeat_pairs": "пар повтора", "repeat_color_same": "повтор цвет",
+           "repeat_type_same": "повтор тип", "repeat_both_same": "повтор цвет+тип", "count_mean": "people ср.", "count_std": "people СКО",
            "count_min": "people мин", "count_max": "people макс", "suspicious": "suspicious",
-           "bad_lines": "битых строк"}
+           "bad_lines": "битых строк", "run_id": "run_id", "started_at": "запуск",
+           "superseded_runs": "старых прогонов"}
 
 
 def read_jsonl(path):
@@ -126,6 +132,8 @@ def summarize(rows, info, repeat_rows=None):
         colors = [str(rec.get("color") or "").lower() for rec in ok]
         out["black_share"] = share(colors.count("black"), len(colors))
         out["unknown_share"] = share(colors.count("unknown"), len(colors))
+        types = [str(rec.get("type") or "").lower() for rec in ok]
+        out["unknown_type_share"] = share(types.count("unknown"), len(types))
         if repeat_rows is not None:
             def by_key(rs):
                 return {(r.get("video_id"), r.get("snapshot_id"), r.get("person_idx")): r["record"] for r in rs
@@ -135,6 +143,8 @@ def summarize(rows, info, repeat_rows=None):
             out["repeat_pairs"] = len(keys)
             out["repeat_color_same"] = share(sum(a[k].get("color") == b[k].get("color") for k in keys), len(keys))
             out["repeat_type_same"] = share(sum(a[k].get("type") == b[k].get("type") for k in keys), len(keys))
+            out["repeat_both_same"] = share(sum(a[k].get("color") == b[k].get("color") and
+                                                a[k].get("type") == b[k].get("type") for k in keys), len(keys))
     else:
         counts = [r["people_count"] for r in rows if r.get("status") == "ok" and _num(r.get("people_count"))]
         if counts:
@@ -145,8 +155,34 @@ def summarize(rows, info, repeat_rows=None):
     return out
 
 
+def read_runs_log(folder):
+    """runs.jsonl -> {file name: [runs sorted by started_at]}, one entry per run_id (the log has one line per video
+    of a run). A missing or broken log gives {}: the summary does not need it."""
+    path = Path(folder) / "runs.jsonl"
+    if not path.is_file():
+        return {}
+    rows, _ = read_jsonl(path)
+    runs = {}
+    for r in rows:
+        out = (r.get("params") or {}).get("out")
+        if not out or not r.get("run_id"):
+            continue
+        name = Path(str(out)).name
+        e = runs.setdefault((name, r["run_id"]), {"run_id": r["run_id"], "started_at": r.get("started_at") or "",
+                                                  "duration_sec": r.get("duration_sec"), "video_ids": []})
+        if r.get("video_id") is not None:
+            e["video_ids"].append(r["video_id"])
+    by_file = {}
+    for (name, _), e in runs.items():
+        by_file.setdefault(name, []).append(e)
+    for v in by_file.values():
+        v.sort(key=lambda e: (e["started_at"], e["run_id"]))
+    return by_file
+
+
 def collect(folder):
     """-> list of summary rows, sorted by model, mode, variant, tag, video_id."""
+    log = read_runs_log(folder)
     files = sorted(p for p in Path(folder).glob("*.jsonl") if p.name != "runs.jsonl")
     loaded = {}
     for p in files:
@@ -166,7 +202,13 @@ def collect(folder):
             vrep = None if rep is None else [r for r in rep if r.get("video_id") == vid]
             s = summarize(vrows, info, vrep)
             s.update(file=p.name, bad_lines=bad)
+            runs = log.get(p.name) or []
+            if runs:  # the file on disk is the output of the LAST run
+                s.update(run_id=runs[-1]["run_id"], started_at=runs[-1]["started_at"], superseded_runs=len(runs) - 1)
             result.append(s)
+        for old in (log.get(p.name) or [])[:-1]:
+            print(f"старый прогон не учтён (файл перезаписан более поздним): {p.name} run_id={old['run_id']} "
+                  f"started_at={old['started_at']} duration_sec={old['duration_sec']}", file=sys.stderr)
     orphans = [p.name for p, v in loaded.items() if v[2]["repeat"] is not None and not any(
         all(v[2][k] == b[2][k] for k in ("model", "mode", "variant", "tag")) for b in bases.values())]
     for name in orphans:
@@ -189,13 +231,15 @@ def to_markdown(rows):
     base = ["model", "mode", "variant", "tag", "video_id", "format", "rows", "ok_share", "truncated_share", "error_share",
             "sec_mean", "sec_p95"]
     parts = []
-    for title, rs, extra in (("Одежда (R1)", r1, ["black_share", "unknown_share", "repeat_pairs",
-                                                   "repeat_color_same", "repeat_type_same"]),
+    for title, rs, extra in (("Одежда (R1)", r1, ["black_share", "unknown_share", "unknown_type_share",
+                                                   "repeat_pairs", "repeat_color_same", "repeat_type_same",
+                                                   "repeat_both_same"]),
                              ("Счёт людей (R2/R3/R4)", cnt, ["count_mean", "count_std", "count_min", "count_max",
                                                              "suspicious"])):
         if not rs:
             continue
-        cols = base + extra + (["bad_lines"] if any(r.get("bad_lines") for r in rs) else [])
+        cols = base + extra + (["bad_lines"] if any(r.get("bad_lines") for r in rs) else []) + \
+            (["superseded_runs"] if any(r.get("superseded_runs") for r in rs) else [])
         lines = [f"### {title}", "", "| " + " | ".join(HEADERS[c] for c in cols) + " |",
                  "|" + "---|" * len(cols)]
         lines += ["| " + " | ".join(_fmt(r.get(c)) for c in cols) + " |" for r in rs]
