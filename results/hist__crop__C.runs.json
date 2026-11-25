@@ -1,0 +1,42 @@
+[
+ {
+  "run_id": "hist-C-8d7041",
+  "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
+  "method": "cv:hist",
+  "model": "cv:hist",
+  "mode": "crop",
+  "prompt_variant": "C",
+  "weights": "",
+  "started_at": "2026-11-24T16:59:12.149201+00:00",
+  "duration_sec": 1.489,
+  "params": {
+   "wb_alpha": 0.5,
+   "skin_filter": true,
+   "k": 3,
+   "dark_sat": 0.6,
+   "neutral_black_v": 0.22,
+   "crop_kind": "path",
+   "n_crops": 156
+  }
+ },
+ {
+  "run_id": "hist-C-10e9db",
+  "video_id": "2018-03-07.17-35-00.17-40-00.school.G421.r13",
+  "method": "cv:hist",
+  "model": "cv:hist",
+  "mode": "crop",
+  "prompt_variant": "C",
+  "weights": "",
+  "started_at": "2026-11-24T16:59:12.149201+00:00",
+  "duration_sec": 0.677,
+  "params": {
+   "wb_alpha": 0.5,
+   "skin_filter": true,
+   "k": 3,
+   "dark_sat": 0.6,
+   "neutral_black_v": 0.22,
+   "crop_kind": "path",
+   "n_crops": 147
+  }
+ }
+]

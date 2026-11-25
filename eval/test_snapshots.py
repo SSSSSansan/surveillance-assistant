@@ -220,7 +220,12 @@ check("окно t_to=100: зелёного нет", not st_.search_by_clothing(c
 check("только цвет: синий на 90, 120, 180", ts(st_.search_by_clothing(color="blue", conn=demo)) == [90.0, 120.0, 180.0])
 check("только тип: футболка", ts(st_.search_by_clothing(clothing_type="футболка", conn=demo)) == [90.0, 120.0, 180.0])
 sw = ts(st_.search_by_clothing(clothing_type="sweater", conn=demo))
-check("'sweater' включает hoodie (группа синонимов): 60, 90, 180, 210, 240", sw == [60.0, 90.0, 180.0, 210.0, 240.0], sw)
+check("'sweater' строгий: hoodie не входит (60, 90, 180, 240)", sw == [60.0, 90.0, 180.0, 240.0], sw)
+hd = ts(st_.search_by_clothing(clothing_type="худи", conn=demo))
+check("«худи» и «толстовка» = hoodie: 180, 210", hd == [180.0, 210.0] and ts(st_.search_by_clothing(clothing_type="толстовка", conn=demo)) == [180.0, 210.0], hd)
+kf = st_.search_by_clothing(clothing_type="кофта", conn=demo)
+check("«кофта» = sweater И hoodie: 60, 90, 180, 210, 240", ts(kf) == [60.0, 90.0, 180.0, 210.0, 240.0] and kf["query"]["clothing_type"] == "hoodie/sweater", kf["query"])
+check("«свитер» = только sweater", ts(st_.search_by_clothing(clothing_type="свитер", conn=demo)) == [60.0, 90.0, 180.0, 240.0])
 check("'grey' = 'gray'", ts(st_.search_by_clothing(color="grey", conn=demo)) == [180.0, 240.0])
 check("красная футболка: нет, и честно сказано про неопределённого человека",
       (lambda x: not x["found"] and x["uncertain_people"] == 1 and "not certain" in x["note"])(
@@ -235,8 +240,11 @@ for args, name in (({}, "нет color и type"), ({"color": 5}, "color не ст
     r = st_.search_by_clothing(conn=demo, **args)
     check(f"ошибка ввода: {name}", r["ok"] is False and "error" in r, r)
 r = st_.search_by_clothing(color="red", video_id="нет_такого", conn=demo)
-check("несуществующее видео: ошибка со списком доступных видео (не ложное «нет»)",
-      r["ok"] is False and "unknown video_id" in r["error"] and "available video ids" in r["error"], r)
+check("выдуманный video_id при единственном видео: берётся это видео, с пометкой (не ложное «нет»)",
+      r["ok"] and r["found"] and r["matches"][0]["video_id"] == "test_video_01" and "not found" in r["video_id_note"]
+      and "test_video_01" in r["video_id_note"], r)
+r = st_.search_by_clothing(color="red", video_id="test_video_01", conn=demo)
+check("настоящий video_id: пометки нет", r["found"] and "video_id_note" not in r)
 for gen in ("any", "all", "clothes", "одежда", "Any"):
     r = st_.search_by_clothing(color="red", clothing_type=gen, conn=demo)
     check(f"clothing_type='{gen}' = без фильтра по типу", r["ok"] and r["found"] and r["query"]["clothing_type"] is None, r)
@@ -276,7 +284,8 @@ for args, name in (({}, "нет t"), ({"t": ""}, "пустой t"), ({"t": -1}, 
     r = st_.count_people_at(conn=demo, **args)
     check(f"count_people_at ошибка: {name}", r["ok"] is False and "error" in r, r)
 r = st_.count_people_at(t=10, video_id="нет_такого", conn=demo)
-check("count_people_at: неизвестное видео -> ошибка со списком", r["ok"] is False and "available video ids" in r["error"], r)
+check("count_people_at: выдуманный video_id при единственном видео -> это видео и пометка",
+      r["ok"] and r["found"] and r["video_id"] == "test_video_01" and "video_id_note" in r, r)
 
 two = base_db()
 sl.load_snapshots_file(write("v1.json", doc([snap("a", 0, 1, [person(0)])])), conn=two)
@@ -295,7 +304,177 @@ check("summary: срезы по порядку времени", [x["t"] for x in
 tie = base_db()
 sl.load_snapshots_file(write("tie.json", doc([snap("a", 0, 3, []), snap("b", 30, 1, []), snap("c", 60, 3, [])])), conn=tie)
 check("максимум в нескольких моментах: перечислены все", st_.get_snapshot_summary(conn=tie)["max_people_t"] == [0.0, 60.0])
-check("summary: неизвестное видео -> ошибка", st_.get_snapshot_summary(video_id="нет", conn=demo)["ok"] is False)
+check("summary: выдуманный video_id при единственном видео -> это видео и пометка",
+      (lambda r: r["ok"] and r["snapshots_count"] == 10 and "video_id_note" in r)(st_.get_snapshot_summary(video_id="нет", conn=demo)))
+r = st_.search_by_clothing(color="red", video_id="vid001", conn=two)
+check("несколько видео и неизвестный video_id -> ошибка со списком доступных видео",
+      r["ok"] is False and "unknown video_id" in r["error"] and "v1" in r["error"] and "v2" in r["error"], r)
+check("count_people_at и summary: то же при нескольких видео",
+      st_.count_people_at(t=0, video_id="vid001", conn=two)["ok"] is False
+      and st_.get_snapshot_summary(video_id="vid001", conn=two)["ok"] is False)
+
+print("== защита «Да/Нет» от противоречия с результатом функции ==")
+from agent import runner as rn_
+Step = rn_.ToolStep
+yes_res = {"ok": True, "found": True, "matches": [{"t": 270.0}, {"t": 300.0}]}
+no_res = {"ok": True, "found": False, "matches": [], "uncertain_people": 0, "snapshots_not_described": 0}
+unc_res = {"ok": True, "found": False, "matches": [], "uncertain_people": 3, "snapshots_not_described": 1}
+fx = rn_.fix_clothing_answer
+check("модель написала «Нет», а found=true -> ответ из результата функции",
+      fx("Нет, не нашёл.", [Step("search_by_clothing", {}, yes_res)], "Был ли человек в красной кофте?")
+      == "Да. Найдено на срезах: 270 с, 300 с.")
+check("английский вопрос -> английский ответ",
+      fx("No", [Step("search_by_clothing", {}, yes_res)], "Was there a red sweater?") == "Yes. Found in snapshots at: 270 s, 300 s.")
+check("модель написала «Да», а found=false -> «Нет»", fx("Да", [Step("search_by_clothing", {}, no_res)], "красная куртка?") == "Нет, не нашёл.")
+unc_ans = fx("Да", [Step("search_by_clothing", {}, unc_res)], "красная куртка?")
+check("found=false и есть неопределённые -> оговорка про неточность", "не точно" in unc_ans and "3 чел." in unc_ans, unc_ans)
+check("ответ модели согласован с результатом -> не меняется",
+      fx("Да, в 270 с и 300 с (в кадре двое).", [Step("search_by_clothing", {}, yes_res)], "q") == "Да, в 270 с и 300 с (в кадре двое)."
+      and fx("Нет.", [Step("search_by_clothing", {}, no_res)], "q") == "Нет.")
+check("ответ не да/нет (например, число) -> не меняется", fx("Двое.", [Step("search_by_clothing", {}, yes_res)], "q") == "Двое.")
+check("больше одного вызова -> ответ модели не трогаем",
+      fx("Нет", [Step("search_by_clothing", {}, yes_res), Step("search_by_clothing", {}, no_res)], "q") == "Нет")
+check("другая функция или ok:false -> не трогаем",
+      fx("Нет", [Step("count_people_at", {}, yes_res)], "q") == "Нет"
+      and fx("Нет", [Step("search_by_clothing", {}, {"ok": False, "error": "x"})], "q") == "Нет")
+check("промпт: про ok:false и язык ответа в конце",
+      "never answer \"not found\"" in rn_.SYSTEM_PROMPT and rn_.SYSTEM_PROMPT.rstrip().endswith("unless the question is in Chinese."))
+
+class _Seq:
+    """Слабая модель: вызывает функцию с выдуманным video_id и после результата отвечает «Нет»."""
+    def __init__(self):
+        self.n = 0
+
+    def chat(self, messages, tools=None):
+        self.n += 1
+        if self.n == 1:
+            return {"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "type": "function", "function": {
+                "name": "search_by_clothing", "arguments": json.dumps({"color": "red", "clothing_type": "кофта", "video_id": "vid001"})}}]}
+        return {"role": "assistant", "content": "Нет, не нашёл."}
+
+
+r = rn_.run_agent("Был ли человек в красной кофте?", _Seq(), demo)
+check("сквозной сценарий: выдуманный video_id + «Нет» модели -> «Да» по данным, без ошибки",
+      not r.error and r.steps[0].result.get("found") and r.answer.startswith("Да") and "60 с" in r.answer, (r.error, r.answer))
+
+class _Loop:
+    """Модель, которая бесконечно повторяет один и тот же вызов и ни разу не отвечает текстом."""
+    def __init__(self, name, args):
+        self.name, self.args, self.n = name, args, 0
+
+    def chat(self, messages, tools=None):
+        self.n += 1
+        return {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{self.n}", "type": "function", "function": {
+            "name": self.name, "arguments": json.dumps(self.args)}}]}
+
+
+lp = _Loop("search_by_clothing", {"color": "red"})
+r = rn_.run_agent("Когда был кто-то в красной или синей одежде?", lp, demo)
+check("зацикливание на search_by_clothing: ответ собран из результата функции, без ошибки",
+      not r.error and r.answer.startswith("Да. Найдено на срезах: 60 с") and len(r.steps) == 2 and lp.n == 2, (r.error, r.answer, len(r.steps)))
+check("повторный вызов помечен для модели", "repeated_call" in r.steps[1].result and "repeated_call" not in r.steps[0].result)
+r = rn_.run_agent("How many people at 90 s?", _Loop("count_people_at", {"t": 90}), demo)
+check("зацикливание на count_people_at: ответ из результата на языке вопроса",
+      not r.error and "3 people" in r.answer and "90 s" in r.answer, (r.error, r.answer))
+r = rn_.run_agent("покажи входы", _Loop("count_events", {"event_type": "enter"}), demo)
+check("зацикливание на других функциях: ответа из результата нет, остаётся ошибка (запасной ответ только для срезов)",
+      r.answer is None and "5 шагов" in r.error, (r.answer, r.error))
+check("fallback_answer: разные функции или ошибка -> None",
+      rn_.fallback_answer([Step("search_by_clothing", {}, yes_res), Step("count_people_at", {}, yes_res)], "q") is None
+      and rn_.fallback_answer([Step("search_by_clothing", {}, {"ok": False, "error": "x"})], "q") is None
+      and rn_.fallback_answer([], "q") is None)
+full = tool_schemas.call_tool("search_by_clothing", {"color": "red"}, demo)
+slim = runner.slim_for_model(full)
+m0 = slim["matches"][0]
+check("slim: у людей только цвет и тип, без описаний; без snapshot_id и video_id в срезах; время и people_count на месте",
+      set(m0["people"][0]) == {"clothing_color", "clothing_type"} and "snapshot_id" not in m0 and "video_id" not in m0
+      and m0["t"] == 60.0 and m0["people_count"] == 2, m0)
+check("slim: результат для модели короче полного", len(json.dumps(slim)) < len(json.dumps(full)) * 0.7)
+sn = runner.slim_for_model(tool_schemas.call_tool("count_people_at", {"t": 90}, demo))
+check("slim: count_people_at — люди без описаний", all(set(p) <= {"clothing_color", "clothing_type"} for p in sn["people"]) and sn["people_count"] == 3)
+
+class _Compound:
+    """Составной вопрос: поиск, потом один и тот же count_people_at по кругу; текстом отвечает только когда функций нет."""
+    def __init__(self):
+        self.n, self.tool_free_calls = 0, 0
+
+    def chat(self, messages, tools=None):
+        self.n += 1
+        if not tools:
+            self.tool_free_calls += 1
+            return {"role": "assistant", "content": "Красное было на срезах 60-300 с; на 90 с людей: 3."}
+        if self.n == 1:
+            name, args = "search_by_clothing", {"color": "red"}
+        else:
+            name, args = "count_people_at", {"t": 90}
+        return {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{self.n}", "type": "function", "function": {
+            "name": name, "arguments": json.dumps(args)}}]}
+
+
+cp = _Compound()
+r = rn_.run_agent("Когда была красная одежда и сколько людей на 90 с?", cp, demo)
+check("составной вопрос + зацикливание: останавливаемся на повторе и просим ответ без функций",
+      not r.error and r.answer.startswith("Красное было") and cp.tool_free_calls == 1 and len(r.steps) == 3
+      and cp.n == 4, (r.error, r.answer, len(r.steps), cp.n))
+
+
+class _Stubborn(_Compound):
+    def chat(self, messages, tools=None):
+        self.n += 1
+        return {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{self.n}", "type": "function", "function": {
+            "name": "count_events", "arguments": json.dumps({"event_type": "enter", "zone_id": f"z{self.n}"})}}]}
+
+
+r = rn_.run_agent("q", _Stubborn(), demo)
+check("модель не отвечает даже без функций -> ошибка, а не зависание", r.answer is None and "шагов" in (r.error or ""), (r.answer, r.error))
+
+class _Script:
+    """Модель по сценарию: список ответов (каждый — dict сообщения)."""
+    def __init__(self, replies):
+        self.replies, self.n = list(replies), 0
+
+    def chat(self, messages, tools=None):
+        self.n += 1
+        return self.replies.pop(0) if self.replies else {"role": "assistant", "content": ""}
+
+
+def _tc(name, args, i=1):
+    return {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{i}", "type": "function", "function": {
+        "name": name, "arguments": json.dumps(args)}}]}
+
+
+check("is_yes_no_question: русские и английские формулировки",
+      all(rn_.is_yes_no_question(q) for q in ("Был ли кто-то в красной одежде?", "Была ли куртка?", "Были ли люди в синем?",
+                                              "Есть ли человек в красном?", "Was there a person in red?", "Did anyone wear red?"))
+      and not any(rn_.is_yes_no_question(q) for q in ("Когда был кто-то в красном?", "Сколько людей было на 90 с?", "")))
+sc = _Script([_tc("search_by_clothing", {"color": "red"})])
+r = rn_.run_agent("Был ли кто-то в красной одежде?", sc, demo)
+check("вопрос да/нет: после первого поиска ответ строится кодом, лишних обращений к модели нет",
+      not r.error and r.answer.startswith("Да. Найдено на срезах: 60 с") and sc.n == 1 and len(r.steps) == 1, (r.error, r.answer, sc.n))
+sc = _Script([_tc("count_people_at", {"t": 90}), _tc("search_by_clothing", {"color": "red"}, 2), {"role": "assistant", "content": ""}])
+r = rn_.run_agent("Был ли кто-то в красной одежде?", sc, demo)
+check("пустой ответ модели после нескольких вызовов (да/нет): ответ по первому успешному поиску",
+      not r.error and r.answer.startswith("Да. Найдено на срезах"), (r.error, r.answer))
+sc = _Script([_tc("count_people_at", {"t": 90}), _tc("search_by_clothing", {"color": "red"}, 2), {"role": "assistant", "content": ""},
+              {"role": "assistant", "content": "Красное было на 60–300 с."}])
+r = rn_.run_agent("Когда был кто-то в красном и сколько людей на 90 с?", sc, demo)
+check("пустой ответ, не да/нет: ещё один запрос без функций, его текст берётся", not r.error and r.answer.startswith("Красное было"), (r.error, r.answer))
+sc = _Script([_tc("count_people_at", {"t": 90}), _tc("search_by_clothing", {"color": "red"}, 2),
+              {"role": "assistant", "content": "", "reasoning": "думаю..."}, {"role": "assistant", "content": "", "reasoning": "ещё думаю"}])
+r = rn_.run_agent("Когда был кто-то в красном и сколько людей на 90 с?", sc, demo)
+check("пустой ответ из-за размышлений: ошибка подсказывает поля ответа и LLM_MAX_TOKENS",
+      r.answer is None and "поля ответа модели: reasoning" in r.error and "LLM_MAX_TOKENS" in r.error, r.error)
+from agent import config as cfg2, llm as llm2
+with contextlib.suppress(KeyError):
+    os.environ.pop("LLM_MAX_TOKENS")
+check("лимит токенов ответа по умолчанию 1536 (не 512), клиент его использует",
+      cfg2.llm_max_tokens() == 1536 and llm2.OpenAICompatClient(base_url="http://x", model="m").max_tokens == 1536)
+os.environ["LLM_MAX_TOKENS"] = "2048"
+check("LLM_MAX_TOKENS переопределяет лимит; явный max_tokens главнее",
+      cfg2.llm_max_tokens() == 2048 and llm2.OpenAICompatClient(base_url="http://x", model="m", max_tokens=100).max_tokens == 100)
+os.environ["LLM_MAX_TOKENS"] = "мусор"
+check("неверное значение LLM_MAX_TOKENS -> по умолчанию", cfg2.llm_max_tokens() == 1536)
+os.environ.pop("LLM_MAX_TOKENS")
 
 print("== схемы, call_tool, промпт, slim ==")
 for name in ("search_by_clothing", "count_people_at", "get_snapshot_summary"):
@@ -335,12 +514,200 @@ class Scripted:
 call = {"role": "assistant", "content": None, "tool_calls": [{"id": "x", "type": "function", "function": {
     "name": "search_by_clothing", "arguments": '{"color": "red", "clothing_type": "sweater"}'}}]}
 c = Scripted(call, {"role": "assistant", "content": "Да, на 60 с и 90 с"})
-res = runner.run_agent("Был ли человек в красной кофте?", c, demo)
+res = runner.run_agent("Когда был человек в красной кофте или свитере?", c, demo)
 sent = json.loads(c.seen[1][3]["content"])
 check("агент: вызов, ответ; модели ушли срезы без путей к кадрам, интерфейсу остался полный результат",
       res.answer.startswith("Да") and "frame_path" not in sent["matches"][0]
       and res.steps[0].result["matches"][0]["frame_path"].endswith(".jpg"))
 check("во всех вызовах модели видны девять функций", len(runner.tool_schemas.to_openai_tools()) == 9)
+
+# ---------- T25: шаблонные ответы, язык, видео по умолчанию ----------
+print("== T25: ответы кодом, защита языка, видео по умолчанию ==")
+cp_ = lambda name, args, q: rn_.shortcut_answer([Step(name, args, tool_schemas.call_tool(name, args, demo))], q)
+a = cp_("count_people_at", {"t": 90}, "Сколько людей было на 90 секунде?")
+check("шаблон: сколько людей на срезе (ru)", a == "На срезе 90 с было 3 человека.", a)
+a = cp_("count_people_at", {"t": 100}, "Сколько людей было на 100 с?")
+check("шаблон: срез не на запрошенном времени, это сказано", "90 с" in a and "запрошено 100 с" in a, a)
+a = cp_("get_snapshot_summary", {}, "Когда было больше всего людей?")
+check("шаблон: максимум людей и когда", "Максимум: 4 человека" in a and "180 с" in a and "1.6" in a, a)
+a = cp_("get_snapshot_summary", {}, "Какое среднее число людей?")
+check("шаблон: среднее", a.startswith("В среднем 1.6"), a)
+check("шаблон: вопрос про одежду по сводке отдаётся модели", cp_("get_snapshot_summary", {}, "Во что были одеты люди?") is None)
+a = cp_("search_by_clothing", {"color": "red"}, "Сколько людей было в красном?")
+check("шаблон: «сколько людей в красном» считает код", a.startswith("Найдено ") and "человек" in a, a)
+a = cp_("search_by_clothing", {"color": "red"}, "Когда был кто-то в красной одежде?")
+check("шаблон: «когда» -> времена срезов", a.startswith("Да. Найдено на срезах: 60 с"), a)
+a = cp_("count_events", {"event_type": "enter"}, "Сколько раз кто-то входил?")
+check("шаблон: count_events с фильтром", False if a is None else a == "Найдено событий: 4 (event_type=enter).", a)
+check("count_events не шаблонится, если вопрос не про число или составной",
+      cp_("count_events", {"event_type": "enter"}, "Опиши входы") is None
+      and cp_("count_events", {"event_type": "enter"}, "Сколько было входов и выходов?") is None)
+check("составной вопрос не отвечается шаблоном после первого вызова",
+      cp_("count_people_at", {"t": 90}, "Когда была красная одежда и сколько людей на 90 с?") is None
+      and cp_("search_by_clothing", {"color": "red"}, "Был ли кто-то в красной или синей одежде?") is None)
+check("шаблон на английском",
+      cp_("count_people_at", {"t": 90}, "How many people at 90 s?") == "At the snapshot at 90 s there were 3 people.")
+check("ошибка функции: шаблона нет, решает модель",
+      rn_.template_answer(Step("count_people_at", {}, {"ok": False, "error": "x"}), "Сколько людей?") is None)
+
+sc = _Script([_tc("count_people_at", {"t": 90})])
+r = rn_.run_agent("Сколько людей было на 90 с?", sc, demo)
+check("агент: один вызов модели, ответ собран кодом", r.answer == "На срезе 90 с было 3 человека." and sc.n == 1 and not r.error, (r.answer, sc.n))
+
+print("-- иероглифы --")
+check("has_foreign_script: китайский ответ на русский вопрос", rn_.has_foreign_script("找到了红色夹克", "Был ли кто-то в красном?"))
+check("has_foreign_script: нормальный ответ и китайский вопрос не считаются нарушением",
+      not rn_.has_foreign_script("Да, был", "Был ли?") and not rn_.has_foreign_script("是的", "有人穿红色吗？"))
+sc = _Script([_tc("search_by_clothing", {"color": "red"}), {"role": "assistant", "content": "是的，找到了"}])
+r = rn_.run_agent("Опиши красную одежду, когда была или нет?", sc, demo)
+check("иероглифы: повтор не помог -> ответ собран кодом, иероглифов нет",
+      not r.error and not rn_.has_foreign_script(r.answer, "Когда?") and r.answer.startswith("Да. Найдено"), (r.error, r.answer))
+sc = _Script([_tc("search_by_clothing", {"color": "red"}), {"role": "assistant", "content": "是的，找到了"},
+              {"role": "assistant", "content": "Красное было на 60 с."}])
+r = rn_.run_agent("Опиши красную одежду, когда была или нет?", sc, demo)
+check("иероглифы: один повтор со строгой инструкцией, его ответ берётся", r.answer == "Красное было на 60 с." and sc.n == 3, (r.answer, sc.n))
+check("системный промпт: правило языка в самом начале", rn_.SYSTEM_PROMPT.startswith("LANGUAGE RULE"))
+
+print("-- кофта и видео по умолчанию --")
+check("prompt: кофта передаётся как «кофта», не как jacket", 'clothing_type="кофта"' in rn_.SYSTEM_PROMPT)
+check("type_set: кофта = sweater+hoodie, худи = hoodie, свитер = sweater, куртка = jacket",
+      st_.type_set("кофта") == {"sweater", "hoodie"} and st_.type_set("Худи") == {"hoodie"}
+      and st_.type_set("свитер") == {"sweater"} and st_.type_set("куртку") == {"jacket"})
+check("hoodie и sweater не смешиваются автоматически", not st_.type_matches("sweater", "hoodie") and st_.type_matches({"sweater", "hoodie"}, "hoodie"))
+check("без DEFAULT_VIDEO_ID несколько видео -> ошибка", st_.get_snapshot_summary(conn=two)["ok"] is False)
+with mock.patch.dict(os.environ, {"DEFAULT_VIDEO_ID": "v2"}):
+    r = st_.get_snapshot_summary(conn=two)
+    check("DEFAULT_VIDEO_ID: берётся это видео, в ответе пометка", r["ok"] and r["video_id"] == "v2" and "default video" in r["video_id_note"], r)
+    r = st_.search_by_clothing(color="red", video_id="vid001", conn=two)
+    check("DEFAULT_VIDEO_ID: выдуманный video_id при нескольких видео -> видео по умолчанию", r["ok"] and "default video" in r["video_id_note"], r)
+with mock.patch.dict(os.environ, {"DEFAULT_VIDEO_ID": "нет-такого"}):
+    check("DEFAULT_VIDEO_ID, которого нет в архиве, игнорируется (честная ошибка)", st_.get_snapshot_summary(conn=two)["ok"] is False)
+
+print("-- проверка аргументов поиска по вопросу --")
+fc = st_.find_clothing_terms
+check("find_clothing_terms: цвет и тип по-русски, падежи", fc("Был ли кто-то в красной футболке?") == (["red"], ["футболке"]))
+check("find_clothing_terms: английский", fc("Was there anyone in a red t-shirt?") == (["red"], ["t-shirt"]))
+check("find_clothing_terms: без одежды ничего не находит", fc("Сколько людей было на 270 секунде?") == ([], []))
+check("find_clothing_terms: два цвета видны", len(fc("Был ли кто-то в красной или синей куртке?")[0]) == 2)
+fixed = lambda a, q: rn_.repair_clothing_args(a, q)
+a, note = fixed({"color": "red", "t_from": 0}, "Был ли кто-то в красной футболке?")
+check("repair: модель потеряла тип -> тип из вопроса добавлен, остальное сохранено", a == {"color": "red", "clothing_type": "футболке"} and note, (a, note))
+a, note = fixed({"color": "blue", "clothing_type": "jacket", "video_id": ""}, "Был ли кто-то в синей кофте?")
+check("repair: «кофта» превращена моделью в jacket -> исправлено на кофту", a["clothing_type"] == "кофте" and note["from"]["clothing_type"] == "jacket", (a, note))
+a, note = fixed({"color": "green", "clothing_type": "jacket"}, "Была ли на ком-то зелёная одежда?")
+check("repair: вопрос про «одежду», модель добавила тип -> тип убран", "clothing_type" not in a and note, (a, note))
+a, note = fixed({"color": "yellow"}, "Был ли кто-то в красном?")
+check("repair: модель исказила цвет -> цвет из вопроса", a["color"] == "red" and note, (a, note))
+a, note = fixed({"color": "red", "clothing_type": "sweater"}, "Был ли кто-то в красной кофте?")
+check("repair: «кофта» шире, чем sweater (ещё и hoodie) -> заменено на «кофте»",
+      a == {"color": "red", "clothing_type": "кофте"} and note, (a, note))
+a, note = fixed({"color": "red", "clothing_type": "кофта"}, "Был ли кто-то в красной кофте?")
+check("repair: модель уже передала «кофта» -> правки нет", note is None, (a, note))
+a, note = fixed({"color": "red"}, "Был ли кто-то в красной или синей куртке?")
+check("repair: несколько цветов в вопросе -> модель не трогаем", a == {"color": "red"} and note is None)
+check("repair: тип, которого нет в словаре, не стираем", fixed({"color": "red", "clothing_type": "jacket"}, "Был ли кто-то в красном бомбере?")[1] is None)
+
+sc = _Script([_tc("search_by_clothing", {"color": "red", "t_from": 0, "t_to": 1200})])
+r = rn_.run_agent("Был ли кто-то в красной футболке?", sc, demo)
+check("агент: модель потеряла «футболку» -> код исправил вызов, ответ «Нет», в шаге видна поправка",
+      r.answer.startswith("Нет") and r.steps[0].arguments["clothing_type"] == "футболке"
+      and r.steps[0].result["arguments_corrected"]["from"]["clothing_type"] is None, (r.answer, r.steps[0].arguments))
+
+print("-- короткий промпт для вопросов про срезы --")
+isq = rn_.is_snapshot_question
+check("маршрут: одежда, число людей на кадре -> срезы",
+      all(isq(q) for q in ("Был ли кто-то в красной одежде?", "Сколько людей было на 270 секунде?", "Когда было больше всего людей?",
+                           "Was there anyone in a red sweater?", "How many people at 90 s?", "Какое среднее число людей?")))
+check("маршрут: события, треки, неясное -> полный промпт",
+      not any(isq(q) for q in ("Сколько раз кто-то входил?", "Перечисли все входы.", "Did anyone pick up an object?",
+                               "Был ли оставленный предмет?", "Сколько людей вошли в красной одежде?", "Что делал человек 7?", "Какого цвета куртка у человека 7?", "Привет", "")))
+check("короткий промпт заметно короче полного (в 4+ раза)", len(rn_.SNAPSHOT_PROMPT) * 4 < len(rn_.SYSTEM_PROMPT),
+      (len(rn_.SNAPSHOT_PROMPT), len(rn_.SYSTEM_PROMPT)))
+check("короткий промпт: правило языка в начале, кофта, только 3 функции",
+      rn_.SNAPSHOT_PROMPT.startswith("LANGUAGE RULE") and 'clothing_type="кофта"' in rn_.SNAPSHOT_PROMPT
+      and rn_.SNAPSHOT_TOOLS == ("search_by_clothing", "count_people_at", "get_snapshot_summary"))
+
+
+class _Spy:
+    """Запоминает, что получила модель: системный промпт и список функций."""
+    def __init__(self, replies):
+        self.replies, self.system, self.tools = list(replies), [], []
+
+    def chat(self, messages, tools=None):
+        self.system.append(messages[0]["content"])
+        self.tools.append([t["function"]["name"] for t in tools] if tools else None)
+        return self.replies.pop(0)
+
+
+sp = _Spy([_tc("search_by_clothing", {"color": "red"})])
+r = rn_.run_agent("Был ли кто-то в красной одежде?", sp, demo)
+check("вопрос про одежду: модель получила короткий промпт и 3 функции",
+      sp.system[0] is rn_.SNAPSHOT_PROMPT and sp.tools[0] == list(rn_.SNAPSHOT_TOOLS) and r.prompt_mode == "snapshots"
+      and r.answer.startswith("Да"), (sp.tools, r.prompt_mode))
+sp = _Spy([{"role": "assistant", "content": "Здравствуйте"}])
+r = rn_.run_agent("Привет", sp, demo)
+check("не вопрос про срезы: промпт этапа 1 и 6 функций событий, текстовый ответ принимается",
+      sp.system[0] is rn_.EVENTS_PROMPT and sp.tools[0] == list(rn_.EVENT_ROUTE_TOOLS) and r.prompt_mode == "events"
+      and r.answer == "Здравствуйте" and len(sp.system) == 1, (sp.tools, r.prompt_mode, r.answer))
+check("промпт событий: правило языка в начале, тексты этапа 1 на месте, короче полного",
+      rn_.EVENTS_PROMPT.startswith("LANGUAGE RULE") and "VLM INTERPRETATION RULES" in rn_.EVENTS_PROMPT
+      and len(rn_.EVENTS_PROMPT) < len(rn_.SYSTEM_PROMPT) and "search_by_clothing" not in rn_.EVENTS_PROMPT)
+sp = _Spy([{"role": "assistant", "content": "Не знаю"}, _tc("search_by_clothing", {"color": "red"})])
+r = rn_.run_agent("Была ли красная одежда?", sp, demo)
+check("короткий путь не вызвал функций -> повтор полным промптом",
+      sp.system[0] is rn_.SNAPSHOT_PROMPT and sp.system[1] is rn_.SYSTEM_PROMPT and r.prompt_mode == "full"
+      and r.answer.startswith("Да"), (sp.system and [x[:12] for x in sp.system], r.answer, r.error))
+sp = _Spy([{"role": "assistant", "content": "ok"}])
+rn_.run_agent("Был ли кто-то в красном?", sp, demo, system_prompt="custom")
+check("свой system_prompt не заменяется коротким", sp.system[0] == "custom")
+
+print("-- окно времени, которого нет в вопросе --")
+a, note = fixed({"color": "red", "clothing_type": "jacket", "t_from": 0, "t_to": 0}, "Был ли кто-то в красной куртке?")
+check("repair: окно [0; 0] убирается", a == {"color": "red", "clothing_type": "jacket"} and note["from"]["t_to"] == 0, (a, note))
+a, note = fixed({"color": "red", "t_from": 0, "t_to": 1200}, "Когда был кто-то в красной одежде?")
+check("repair: выдуманное окно [0; 1200], в вопросе времени нет -> убирается", "t_from" not in a and "t_to" not in a and note, (a, note))
+a, note = fixed({"color": "red", "t_from": 60, "t_to": 120}, "Был ли кто-то в красном между 60 и 120 с?")
+check("repair: время названо в вопросе -> окно модели не трогаем", a == {"color": "red", "t_from": 60, "t_to": 120} and note is None, (a, note))
+a, note = fixed({"color": "red", "t_from": 0, "t_to": 0}, "Был ли кто-то в красном на 0 секунде?")
+check("repair: нулевое окно убирается даже при названном времени", "t_to" not in a, a)
+sc = _Script([_tc("search_by_clothing", {"color": "red", "clothing_type": "sweater", "t_from": 0, "t_to": 0})])
+r = rn_.run_agent("Был ли кто-то в красной кофте?", sc, demo)
+check("агент: модель передала окно [0; 0] -> ответ «Да», как без окна", r.answer.startswith("Да") and "t_to" not in r.steps[0].arguments, (r.answer, r.steps[0].arguments))
+
+print("-- события: выдуманные аргументы, вопросы вне базы, функции срезов на вопрос про события --")
+ra = lambda a, q: rn_.repair_event_args(a, q, demo)
+a, note = ra({"event_type": "enter", "t_from": 0, "t_to": 3600, "video_id": "video_001"}, "Сколько раз кто-то входил?")
+check("события: выдуманные окно времени и video_id убираются", a == {"event_type": "enter"} and note, (a, note))
+a, note = ra({"event_type": "enter", "t_from": 0, "t_to": 100}, "Сколько раз кто-то входил в первые 100 секунд?")
+check("события: время названо в вопросе -> окно остаётся", a == {"event_type": "enter", "t_from": 0, "t_to": 100} and note is None, (a, note))
+a, note = ra({"track_id": 7, "video_id": "test_video_01"}, "Когда человек 7 вошёл?")
+check("события: настоящий video_id остаётся", a == {"track_id": 7, "video_id": "test_video_01"} and note is None, (a, note))
+a, note = ra({"track_id": 7, "video_id": ""}, "Когда человек 7 вошёл?")
+check("события: пустой video_id убирается (цифра в «человек 7» это не время)", a == {"track_id": 7}, (a, note))
+oos = lambda q: rn_.out_of_scope_answer(q, demo)
+check("вне базы: одежда конкретного человека", oos("Какого цвета куртка у человека 7?").startswith("Ответить нельзя")
+      and oos("What was person 7 wearing?").startswith("Cannot answer"))
+check("вне базы: «почему» и неизвестная камера", oos("Почему человек 8 оставил предмет?") and oos("Сколько входов было на камере cam02?")
+      and "cam02" in oos("Сколько входов было на камере cam02?"))
+check("не вне базы: обычные вопросы и известная камера",
+      all(oos(q) is None for q in ("Был ли кто-то в красной куртке?", "Сколько раз кто-то входил?", "Когда человек 7 вошёл?",
+                                   "Что делал человек 7 после того, как взял предмет?", "Сколько входов было на камере cam01?")))
+sc = _Script([_tc("count_events", {})])
+r = rn_.run_agent("Какого цвета куртка у человека 7?", sc, demo)
+check("агент: вопрос вне базы отвечает код, модель не вызывается", r.answer.startswith("Ответить нельзя") and sc.n == 0 and r.prompt_mode == "code", (r.answer, sc.n))
+sc = _Script([_tc("search_by_clothing", {"t_from": 90, "t_to": 90}), {"role": "assistant", "content": "Нет"}])
+r = rn_.run_agent("Был ли оставленный предмет до 90-й секунды?", sc, demo)
+check("событийный вопрос + функция срезов: шаблонного «Да» по срезам нет, ответ модели не заменяется",
+      not r.answer.startswith("Да. Найдено на срезах") and r.answer == "Нет", (r.answer, r.error))
+check("fallback по срезам не работает для вопроса про события",
+      rn_.fallback_answer([rn_.ToolStep("search_by_clothing", {}, {"ok": True, "found": True, "matches": [{"t": 60}], "count": 1})],
+                          "Был ли оставленный предмет до 90-й секунды?") is None)
+
+with mock.patch.dict(os.environ, {"LLM_TIMEOUT": "300"}):
+    check("LLM_TIMEOUT меняет таймаут клиента", llm2.OpenAICompatClient(model="m").timeout == 300.0)
+with mock.patch.dict(os.environ, {"LLM_TIMEOUT": "abc"}):
+    check("LLM_TIMEOUT с мусором -> 120 с", llm2.OpenAICompatClient(model="m").timeout == 120.0)
+check("таймаут, переданный явно, сильнее переменной", llm2.OpenAICompatClient(model="m", timeout=5).timeout == 5)
 
 # ---------- помощники интерфейса ----------
 print("== помощники интерфейса архива ==")
@@ -373,6 +740,61 @@ check("collect_snapshots: из matches и count_people_at, без повторо
 check("collect_snapshots не берёт весь архив из summary",
       ah.collect_snapshots([type("S", (), {"result": st_.get_snapshot_summary(conn=demo)})()]) == [])
 
+
+print("== вопросы «да/нет» по событиям кодом, язык ответа ==")
+EQ = rn_.is_event_exists_question
+check("exists-вопросы распознаются",
+      all(EQ(q) for q in ["Выходил ли человек 12?", "Брал ли что-нибудь человек 12?", "Подходил ли человек 9 к столу?",
+                          "Был ли оставленный предмет?", "Были ли события с человеком 99?", "Did anyone pick up an object?",
+                          "Was there an exit after 160 seconds?", "Did anyone enter between 20 and 55 seconds?"]))
+check("не exists: счёт, время, составные, срезы",
+      not any(EQ(q) for q in ["Сколько раз кто-то входил?", "Когда человек 8 вошёл?", "Когда был последний выход?",
+                              "Был ли кто-то в красной кофте?", "Выходил ли человек 12 или 9?", "Did anyone enter and exit?",
+                              "Did anyone enter, then exit?", "What happened after person 8 left?", "How many exits were there?",
+                              "Что делал человек 7 после того, как взял предмет?", "List all events of person 9."]))
+mk_ev = lambda name, count, **a: Step(name, a, {"ok": True, "count": count, "events": [{}] * count} if name == "query_events" else {"ok": True, "count": count})
+check("ru: нашлось -> «Да. Найдено событий: N (фильтры).»",
+      rn_.template_answer(mk_ev("query_events", 1, event_type="pick_up"), "Брал ли кто-то предмет?") == "Да. Найдено событий: 1 (event_type=pick_up).")
+check("ru: не нашлось -> «Нет. Событий не найдено (фильтры).»",
+      rn_.template_answer(mk_ev("query_events", 0, event_type="exit", track_id=12), "Выходил ли человек 12?") == "Нет. Событий не найдено (event_type=exit, track_id=12).")
+check("en: ответ по-английски, count_events тоже",
+      rn_.template_answer(mk_ev("count_events", 0, event_type="enter", t_from=20, t_to=55), "Did anyone enter between 20 and 55 seconds?")
+      == "No. No events found (event_type=enter, t=20–55)." and
+      rn_.template_answer(mk_ev("count_events", 2, event_type="enter"), "Did anyone enter?") == "Yes. Events found: 2 (event_type=enter).")
+check("ошибка функции: шаблона нет, отвечает модель",
+      rn_.template_answer(Step("query_events", {}, {"ok": False, "error": "x"}), "Выходил ли человек 12?") is None)
+check("вопрос про счёт по-прежнему даёт «Найдено событий»",
+      rn_.template_answer(mk_ev("count_events", 4, event_type="enter"), "Сколько раз кто-то входил?") == "Найдено событий: 4 (event_type=enter).")
+check("шаблон не ломает грейдер: «Да.»/«Нет.» в начале",
+      rn_._YES.match("Да. Найдено событий: 1.") and rn_._NO.match("Нет. Событий не найдено.") and rn_._YES.match("Yes. Events found: 1.") and rn_._NO.match("No. No events found."))
+check("язык: русский ответ на английский вопрос плохой, английский нет, русский вопрос не трогается",
+      rn_.has_wrong_language("Нет, никто не входил.", "Did anyone enter?") and not rn_.has_wrong_language("No one entered.", "Did anyone enter?")
+      and not rn_.has_wrong_language("Нет.", "Выходил ли человек 12?") and not rn_.has_wrong_language("Yes, door.", "Was there a door?"))
+class _LangClient:
+    def __init__(self, replies): self.replies, self.n = list(replies), 0
+    def chat(self, messages, tools):
+        self.n += 1
+        return {"content": self.replies.pop(0)}
+lc = _LangClient(["No one entered between 20 and 55 s."])
+check("guard_language: русский ответ на английский вопрос -> одна повторная попытка, берётся английский",
+      rn_.guard_language("Нет, никто не входил.", lc, [], [], "Did anyone enter between 20 and 55 seconds?") == "No one entered between 20 and 55 s." and lc.n == 1)
+lc = _LangClient(["Снова по-русски."])
+check("guard_language: повтор тоже не на том языке -> сообщение, а не русский текст",
+      "wrong language" in rn_.guard_language("Нет.", lc, [], [], "Did anyone enter?") and lc.n == 1)
+lc = _LangClient([])
+check("guard_language: верный язык -> без повторов", rn_.guard_language("No.", lc, [], [], "Did anyone enter?") == "No." and lc.n == 0)
+
+
+RA = rn_.repair_event_args
+check("«до 90 секунды»: t_from=90 -> t_to=90",
+      RA({"event_type": "abandoned_object", "t_from": 90}, "Был ли оставленный предмет до 90-й секунды?")[0] == {"event_type": "abandoned_object", "t_to": 90})
+check("«before 60 seconds»: t_from=60 -> t_to=60; «after 160 seconds»: t_to=160 -> t_from=160",
+      RA({"t_from": "60"}, "Did anyone put something down before 60 seconds?")[0] == {"t_to": "60"}
+      and RA({"t_to": 160}, "Was there an exit after 160 seconds?")[0] == {"t_from": 160})
+check("верные границы не трогаются",
+      RA({"t_to": 90}, "Был ли предмет до 90 секунды?") == ({"t_to": 90}, None)
+      and RA({"t_from": 160}, "Was there an exit after 160 seconds?") == ({"t_from": 160}, None)
+      and RA({"t_from": 20, "t_to": 55}, "Did anyone enter between 20 and 55 seconds?") == ({"t_from": 20, "t_to": 55}, None))
 # Страница архива (на заглушке streamlit) проверяется в eval/test_design.py
 
 print(f"\nИТОГО провалов: {FAILS}")

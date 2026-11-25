@@ -1,0 +1,36 @@
+[
+ {
+  "run_id": "siglip-A-d12467",
+  "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
+  "method": "cv:siglip",
+  "model": "google/siglip-base-patch16-224",
+  "mode": "crop",
+  "prompt_variant": "A",
+  "weights": "google/siglip-base-patch16-224",
+  "started_at": "2026-11-24T13:03:31.630093+00:00",
+  "duration_sec": 5.718,
+  "params": {
+   "model_id": "google/siglip-base-patch16-224",
+   "device": "cuda",
+   "crop_kind": "path",
+   "n_crops": 156
+  }
+ },
+ {
+  "run_id": "siglip-A-b37a80",
+  "video_id": "2018-03-07.17-35-00.17-40-00.school.G421.r13",
+  "method": "cv:siglip",
+  "model": "google/siglip-base-patch16-224",
+  "mode": "crop",
+  "prompt_variant": "A",
+  "weights": "google/siglip-base-patch16-224",
+  "started_at": "2026-11-24T13:03:31.630093+00:00",
+  "duration_sec": 4.992,
+  "params": {
+   "model_id": "google/siglip-base-patch16-224",
+   "device": "cuda",
+   "crop_kind": "path",
+   "n_crops": 147
+  }
+ }
+]

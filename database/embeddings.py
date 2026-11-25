@@ -58,8 +58,16 @@ class BGEM3Embedder:
         return self._model.encode(list(texts), normalize_embeddings=True).tolist()
 
 
+_DEFAULT_EMBEDDER = None
+
+
 def get_default_embedder():
-    return BGEM3Embedder()
+    """Один эмбеддер на процесс: раньше при каждом semantic-поиске создавался новый, и модель BGE-M3 грузилась заново
+    (а без интернета ещё и ждала повторы запросов к Hugging Face, десятки секунд)."""
+    global _DEFAULT_EMBEDDER
+    if _DEFAULT_EMBEDDER is None:
+        _DEFAULT_EMBEDDER = BGEM3Embedder()
+    return _DEFAULT_EMBEDDER
 
 
 def build_embeddings(conn, embedder, model=None, batch_size=32):

@@ -1,61 +1,66 @@
-"""Common answer contract for every clothing method (VLM now; CV baselines of Arai later).
+"""Общий контракт ответа (STAGE3_PLAN.md, п. 4.1) и словарь.
 
-    {"color": "red", "color_2": "brown", "type": "sweater", "confidence": 0.72,
-     "description": "red sweater, standing", "method": "vlm:qwen3-vl-4b", "mode": "crop",
-     "prompt_variant": "A"}
+СЛОВАРЬ ТОТ ЖЕ, что в vlm/describe_snapshot.py (13 цветов + unknown, 11 типов + unknown).
+Если его там поменяют, тест eval/test_cv_methods.py упадёт: он сверяет эти списки с файлом Панды.
 
-color_2 and confidence are None when the prompt variant does not ask for them (A, B, C).
-Vocabulary is the stage-2 one (14 colors, 12 types, unknown); it is imported, not copied.
+Контракт ответа использует ключи `color` / `type` (как в плане). В базе и в snapshots.json
+те же значения называются clothing_color / clothing_type: перевод делает eval/export_snapshots_json.py.
 """
-import describe_snapshot as ds
+from __future__ import annotations
 
-COLORS = ds.COLORS
-TYPES = ds.TYPES
-CONTRACT_KEYS = ("color", "color_2", "type", "confidence", "description", "method", "mode",
-                 "prompt_variant")
+from abc import ABC, abstractmethod
 
+UNKNOWN = "unknown"
 
-def make_record(color, type_, method, mode, prompt_variant, color_2=None, confidence=None,
-                description="") -> dict:
-    return {"color": color, "color_2": color_2, "type": type_, "confidence": confidence,
-            "description": description or "", "method": method, "mode": mode,
-            "prompt_variant": prompt_variant}
+COLORS = ("red", "orange", "yellow", "green", "blue", "purple", "pink", "brown",
+          "black", "white", "gray", "beige", "multicolor", "unknown")
+TYPES = ("sweater", "hoodie", "t-shirt", "shirt", "jacket", "coat", "dress",
+         "pants_only", "vest", "uniform", "other", "unknown")
 
-
-def validate_record(rec: dict) -> list:
-    """List of problems (empty = ok). Used by tests and by the benchmarks as a guard."""
-    problems = []
-    for k in CONTRACT_KEYS:
-        if k not in rec:
-            problems.append(f"missing key {k}")
-    if problems:
-        return problems
-    if rec["color"] not in COLORS:
-        problems.append(f"color {rec['color']!r} not in vocabulary")
-    if rec["color_2"] is not None and rec["color_2"] not in COLORS:
-        problems.append(f"color_2 {rec['color_2']!r} not in vocabulary")
-    if rec["type"] not in TYPES:
-        problems.append(f"type {rec['type']!r} not in vocabulary")
-    c = rec["confidence"]
-    if c is not None and not (isinstance(c, (int, float)) and not isinstance(c, bool) and 0 <= c <= 1):
-        problems.append(f"confidence {c!r} not in 0..1")
-    return problems
+# То, что цветовые методы (M1, M2, M3) вообще могут предсказать.
+# multicolor / unknown не предсказываем: "нет доминирующего цвета" без нейросети не определить.
+PREDICT_COLORS = tuple(c for c in COLORS if c not in ("multicolor", "unknown"))
+# Для zero-shot по типам: pants_only/other/unknown - не "вещь", описывать их текстом бессмысленно.
+PREDICT_TYPES = tuple(t for t in TYPES if t not in ("pants_only", "other", "unknown"))
 
 
-class BaseDescriber:
-    """A method that turns an image into contract records. Subclasses implement the two calls.
+def make_answer(color=UNKNOWN, color_2=None, type=UNKNOWN, confidence=0.0,
+                description="", method="", mode="crop", prompt_variant="A",
+                **extras) -> dict:
+    """Один ответ в формате общего контракта. Лишние поля уходят в extras."""
+    ans = {
+        "color": color,
+        "color_2": color_2,
+        "type": type,
+        "confidence": None if confidence is None else round(float(confidence), 4),
+        "description": description,
+        "method": method,
+        "mode": mode,
+        "prompt_variant": prompt_variant,
+    }
+    if extras:
+        ans["extras"] = extras
+    return ans
 
-    describe_crop(crop_data_url, person_idx) -> {"status": "ok"|"error", "record": dict|None, ...}
-    describe_frame(frame_path, boxes)        -> {"status", "people_count": int|None, "records": [...], ...}
-    Both results also carry: warnings, raw_response, error, attempts, prompt_tokens,
-    completion_tokens, seconds.
-    """
+
+class Describer(ABC):
+    """Любой метод (гистограмма, SigLIP, PAR, VLM) наследует этот класс."""
+
     method = "base"
-    mode = None
+    mode = "crop"
     prompt_variant = "A"
+    needs_full_body = False  # True: методу нужен кроп человека целиком, а не торса
 
-    def describe_crop(self, crop_data_url: str, person_idx: int = 0) -> dict:
-        raise NotImplementedError
+    @abstractmethod
+    def describe(self, img_bgr) -> dict:
+        """img_bgr: numpy-массив BGR (как отдаёт cv2.imread)."""
 
-    def describe_frame(self, frame_path: str, boxes: list = None) -> dict:
-        raise NotImplementedError
+    def describe_many(self, imgs):
+        return [self.describe(i) for i in imgs]
+
+    def params(self) -> dict:
+        """Параметры для таблицы runs (JSON)."""
+        return {}
+
+    def weights(self) -> str:
+        return ""
