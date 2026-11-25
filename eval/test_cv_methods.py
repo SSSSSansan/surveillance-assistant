@@ -3,6 +3,7 @@
 """
 import ast
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -42,8 +43,11 @@ def _tuple_from(path, name):
 
 
 vlm_file = ROOT / "vlm" / "describe_snapshot.py"
-check("словарь цветов совпадает с vlm/describe_snapshot.py", _tuple_from(vlm_file, "COLORS") == base.COLORS)
-check("словарь типов совпадает с vlm/describe_snapshot.py", _tuple_from(vlm_file, "TYPES") == base.TYPES)
+if vlm_file.exists():
+    check("словарь цветов совпадает с vlm/describe_snapshot.py", _tuple_from(vlm_file, "COLORS") == base.COLORS)
+    check("словарь типов совпадает с vlm/describe_snapshot.py", _tuple_from(vlm_file, "TYPES") == base.TYPES)
+else:
+    print("SKIP словарь: нет vlm/describe_snapshot.py (возьми из main: git checkout origin/main -- vlm/describe_snapshot.py)")
 
 # ------------------------------------------------------------------ цвета (M1)
 
@@ -138,7 +142,11 @@ for c, col in zip([x for x in cr if x["kept"]], ["red", "black"]):
 
 
 def run(*args):
-    return subprocess.run([sys.executable, "-m", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    # На Windows дочерний процесс печатает в cp1251, а читаем мы как utf-8 -> UnicodeDecodeError.
+    # Принудительно просим дочерний процесс писать в utf-8.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    return subprocess.run([sys.executable, "-m", *args], cwd=ROOT, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=env)
 
 
 r = run("eval.run_method", "--method", "hist", "--index", str(out / "crops_index.json"), "--out", str(tmp / "res"))
@@ -179,10 +187,15 @@ if real.exists():
           and base_json["snapshots"][0]["people"][1]["clothing_color"] == "gray", str(p0))
     try:
         from database.snapshots_loader import _validate
-        _validate(base_json)
-        check("экспорт: файл проходит валидацию вашего snapshots_loader", True)
-    except Exception as e:  # noqa: BLE001
-        check("экспорт: файл проходит валидацию вашего snapshots_loader", False, repr(e)[:200])
+    except ImportError:
+        print("SKIP экспорт: нет database/snapshots_loader.py "
+              "(возьми из main: git checkout origin/main -- database/snapshots_loader.py)")
+    else:
+        try:
+            _validate(base_json)
+            check("экспорт: файл проходит валидацию вашего snapshots_loader", True)
+        except Exception as e:  # noqa: BLE001
+            check("экспорт: файл проходит валидацию вашего snapshots_loader", False, repr(e)[:200])
 
 # ------------------------------------------------------------------ T32
 
@@ -252,7 +265,22 @@ fx.write_text(json.dumps([{"video_id": "v", "snapshot_id": "sn_0000", "people_co
 r = run("eval.score_methods", "count", "--gold", str(g_dir / "gold_frames_*.csv"), "--frames-index", str(fx))
 check("T33: маска gold_frames_*.csv, пустые строки пропущены, расхождение разметчиков показано",
       r.returncode == 0 and "Aray - 1 кадров" in r.stdout and "Saniya - 1 кадров" in r.stdout
-      and "разошлись на 1 из 1" in r.stdout and "кадров: 1" in r.stdout, r.stdout[-500:] + r.stderr[-300:])
+      and "разошлись на 1 из 1" in r.stdout and "кадров с эталоном: 1" in r.stdout, r.stdout[-500:] + r.stderr[-300:])
+
+# ------------------------------------------------- T33: счёт VLM (R2/R3/R4) из файлов Сании
+
+vc = g_dir / "count_vlm_R2.jsonl"
+vc.write_text("\n".join(json.dumps(x) for x in [
+    {"video_id": "v", "snapshot_id": "sn_0000", "people_count": 6, "status": "ok", "suspicious": False},
+    {"video_id": "v", "snapshot_id": "sn_0001", "people_count": 0, "status": "ok", "suspicious": True},
+    {"video_id": "v", "snapshot_id": "sn_0002", "people_count": None, "status": "truncated", "suspicious": False}]),
+    encoding="utf-8")
+(g_dir / "gold_one.csv").write_text("video_id,snapshot_id,true_people_count,labeler\nv,sn_0000,4,A\nv,sn_0001,9,A\n", encoding="utf-8")
+r = run("eval.score_methods", "count", "--gold", str(g_dir / "gold_one.csv"), "--frames-index", str(fx),
+        "--vlm-counts", str(vc))
+check("T33: счёт VLM: status!=ok и suspicious не учитываются, ошибка +2 по единственному годному кадру",
+      r.returncode == 0 and "не учтено из-за status/suspicious: 2" in r.stdout and "средняя ошибка со знаком: +2.00" in r.stdout,
+      r.stdout[-600:] + r.stderr[-300:])
 
 print(f"\nИТОГО: провалено {len(FAILS)}")
 sys.exit(1 if FAILS else 0)
