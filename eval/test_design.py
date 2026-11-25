@@ -343,16 +343,16 @@ with fake_llm.FakeOpenAIServer(fake_llm.OracleClient(ROWS)) as srv, tempfile.Tem
 
     st = run_chat(sess, srv.url, d, prompt="Сколько раз кто-то входил?")
     check("чат: вопрос и ответ попали в историю", [m["role"] for m in sess["chat"]] == ["user", "assistant"]
-          and sess["chat"][1]["content"] == "4", sess["chat"])
+          and sess["chat"][1]["content"] == "Найдено событий: 4 (event_type=enter).", sess["chat"])
     check("чат: порядок пузырей: приветствие, вопрос, ответ", st.roles == ["assistant", "user", "assistant"], st.roles)
     check("чат: ответ выведен обычным markdown (без unsafe_allow_html)",
-          any(c.args and c.args[0] == "4" and not c.kwargs.get("unsafe_allow_html") for c in st.markdown.call_args_list))
+          any(c.args and c.args[0] == "Найдено событий: 4 (event_type=enter)." and not c.kwargs.get("unsafe_allow_html") for c in st.markdown.call_args_list))
     check("чат: вызов функций показан в expander", st.expander.called and st.code.called)
     n_req = len(srv.requests)
     st = run_chat(sess, srv.url, d)
     check("чат: при перерисовке история показывается заново, модель не вызывается повторно",
           st.roles == ["assistant", "user", "assistant"] and len(srv.requests) == n_req
-          and any(c.args and c.args[0] == "4" for c in st.markdown.call_args_list))
+          and any(c.args and c.args[0] == "Найдено событий: 4 (event_type=enter)." for c in st.markdown.call_args_list))
 
     sess2 = SS()
     with fake_llm.FakeOpenAIServer(AnswerClient()) as srv3:

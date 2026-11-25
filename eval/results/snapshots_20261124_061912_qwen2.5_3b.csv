@@ -1,0 +1,4 @@
+﻿run,question,expected,ok,tool_calls,tools,arguments,seconds,foreign_script,answer,error
+1,Был ли кто-то в красной кофте?,yes,True,1,search_by_clothing,"{""color"": ""red"", ""t_from"": 0, ""t_to"": 1200, ""clothing_type"": ""кофте""}",43.008,False,"Да. Найдено на срезах: 270 с, 300 с.",
+2,Был ли кто-то в красной кофте?,yes,True,1,search_by_clothing,"{""color"": ""red"", ""video_id"": """", ""clothing_type"": ""кофте""}",4.77,False,"Да. Найдено на срезах: 270 с, 300 с.",
+3,Был ли кто-то в красной кофте?,yes,True,1,search_by_clothing,"{""video_id"": """", ""color"": ""red"", ""clothing_type"": ""кофте""}",4.658,False,"Да. Найдено на срезах: 270 с, 300 с.",

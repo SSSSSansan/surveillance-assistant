@@ -101,7 +101,7 @@ r = runner.run_agent("Привет", Scripted(ans("Здравствуйте")), 
 check("ответ без функций", r.answer == "Здравствуйте" and r.steps == [] and r.error is None)
 
 c = Scripted(call("count_events", '{"event_type": "enter"}'), ans("4"))
-r = runner.run_agent("Сколько входов?", c, conn)
+r = runner.run_agent("Опиши входы", c, conn)
 check("функция -> ответ", r.answer == "4" and len(r.steps) == 1 and r.steps[0].result["count"] == 4, r)
 hist = c.seen[1]
 check("история: system, user, assistant(tool_calls), tool",
@@ -244,10 +244,12 @@ check("по типам: все шесть типов", sorted(s["by_type"]) == [
 
 n_count = sum(1 for r in ROWS if r["expected_tool"] == "count_events")
 s2 = eval_agent.summarize(eval_agent.evaluate(fake_llm.WrongToolClient(), ROWS, conn))
-check("модель с неверной функцией: верна только там, где ждали count_events",
-      s2["tool_ok"] == n_count and s2["args_ok"] == 0 and s2["answer_ok"] < 10, s2)
-s3 = eval_agent.summarize(eval_agent.evaluate(fake_llm.NoToolClient(), ROWS, conn))
 n_none = sum(1 for r in ROWS if r["expected_tool"] == "none")
+check("модель с неверной функцией: верна только там, где ждали count_events, и на вопросах вне базы "
+      "(на них код отвечает «ответить нельзя» сам, модель не вызывается)",
+      s2["tool_ok"] == n_count + n_none and s2["args_ok"] == n_none and s2["by_type"]["out_of_scope"]["answer_ok"] == n_none
+      and s2["answer_ok"] < 10, s2)
+s3 = eval_agent.summarize(eval_agent.evaluate(fake_llm.NoToolClient(), ROWS, conn))
 check("модель без функций: «функция верна» только для вопросов вне базы",
       s3["tool_ok"] == n_none and s3["answer_ok"] < 12, s3)
 with fake_llm.FakeOpenAIServer(fake_llm.OracleClient(ROWS)) as srv:

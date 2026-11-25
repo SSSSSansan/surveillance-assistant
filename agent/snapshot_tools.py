@@ -16,7 +16,7 @@
 import functools
 import re
 
-from agent import tools
+from agent import config, tools
 
 MAX_MATCHES = 50
 
@@ -49,7 +49,8 @@ _GENERIC = {"any", "all", "unknown", "none", "null", "clothes", "clothing", "out
 
 # каноническое название -> синонимы. Запрос и тип человека сравниваются по каноническому названию.
 TYPE_GROUPS = {
-    "sweater": ["sweater", "jumper", "cardigan", "hoodie", "sweatshirt", "pullover"],
+    "sweater": ["sweater", "jumper", "cardigan", "sweatshirt", "pullover"],
+    "hoodie": ["hoodie", "hooded sweatshirt"],
     "t-shirt": ["t-shirt", "tshirt", "t shirt", "tee", "tee shirt", "tank top"],
     "shirt": ["shirt", "blouse", "button-up", "polo"],
     "jacket": ["jacket", "windbreaker", "parka", "bomber", "puffer", "down jacket", "blazer"],
@@ -58,8 +59,10 @@ TYPE_GROUPS = {
     "vest": ["vest"],
     "uniform": ["uniform"],
 }
-_RU_TYPES = [("кофт", "sweater"), ("свитер", "sweater"), ("толстовк", "sweater"), ("худи", "sweater"),
-             ("джемпер", "sweater"), ("кардиган", "sweater"), ("футболк", "t-shirt"), ("майк", "t-shirt"),
+# «кофта» неоднозначна: так говорят и про свитер, и про худи/толстовку. Только это слово ищет обе категории;
+# остальные русские слова строгие, как словарь VLM (hoodie и sweater не смешиваются).
+_RU_TYPES = [("кофт", "sweater"), ("свитер", "sweater"), ("свитшот", "sweater"), ("толстовк", "hoodie"),
+             ("худи", "hoodie"), ("джемпер", "sweater"), ("кардиган", "sweater"), ("футболк", "t-shirt"), ("майк", "t-shirt"),
              ("рубашк", "shirt"), ("блуз", "shirt"), ("куртк", "jacket"), ("ветровк", "jacket"),
              ("пуховик", "jacket"), ("пальт", "coat"), ("плащ", "coat"), ("плать", "dress"),
              ("жилет", "vest"), ("форм", "uniform")]
@@ -97,6 +100,63 @@ def canonical_type(value):
     return _CANON.get(v, _CANON.get(v.replace(" ", "-"), v))
 
 
+_AMBIGUOUS_RU = {"кофт": ("sweater", "hoodie")}
+
+
+def type_set(value):
+    """Запрос типа -> множество категорий VLM. Обычно одна; «кофта» даёт sweater и hoodie."""
+    v = " ".join(value.lower().replace("_", " ").split())
+    if _CYR.search(v):
+        for stem, cats in _AMBIGUOUS_RU.items():
+            if v.startswith(stem):
+                return set(cats)
+    return {canonical_type(value)}
+
+
+_BASE_COLORS = {"red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "black", "white", "gray",
+                "beige", "multicolor"}
+_WORD = re.compile(r"[a-zа-яё][a-zа-яё-]*", re.I)
+_GENERIC_WORDS = re.compile(r"одежд|clothes|clothing|outfit", re.I)
+
+
+def has_generic_word(question):
+    """В вопросе сказано просто «одежда»: тип одежды не задан."""
+    return bool(_GENERIC_WORDS.search(question or ""))
+
+
+def find_clothing_terms(question):
+    """Цвета и типы одежды, названные в вопросе: (список цветов en, список слов-типов).
+
+    Русские слова ищутся по основе (красную -> red, кофте -> «кофте»), английские по словарю VLM.
+    Нужно, чтобы проверить, что слабая модель не потеряла и не исказила цвет или тип при вызове функции."""
+    colors, types = [], []
+    for w in _WORD.findall((question or "").lower()):
+        if _CYR.search(w):
+            for stem, en in _RU_COLORS:
+                if w.startswith(stem) and len(w) <= len(stem) + 6:
+                    colors.append(en)
+                    break
+            else:
+                for stem, _ in _RU_TYPES:
+                    if w.startswith(stem) and len(w) <= len(stem) + 6:
+                        types.append(w)
+                        break
+        else:
+            c = normalize_color(w)
+            if c in _BASE_COLORS:
+                colors.append(c)
+            elif w in _CANON or w.replace("-", " ") in _CANON:
+                types.append(w)
+    uniq_colors = list(dict.fromkeys(colors))
+    uniq_types, seen = [], []
+    for t in types:
+        ts = type_set(t)
+        if ts not in seen:
+            seen.append(ts)
+            uniq_types.append(t)
+    return uniq_colors, uniq_types
+
+
 def color_matches(wanted, person_color):
     """'blue' совпадает с 'dark blue' (слова запроса входят в цвет человека); 'unknown' не совпадает."""
     have = normalize_color(person_color or "unknown")
@@ -106,8 +166,10 @@ def color_matches(wanted, person_color):
 
 
 def type_matches(wanted, person_type):
+    """wanted: категория (строка) или множество категорий."""
     have = canonical_type(person_type or "unknown")
-    return have != "unknown" and have == wanted
+    wanted = {wanted} if isinstance(wanted, str) else set(wanted)
+    return have != "unknown" and have in wanted
 
 
 # ---------- проверка аргументов (пустая строка = аргумента нет: слабые модели так делают) ----------
@@ -208,18 +270,35 @@ def _unknown_video(video_id, vids):
             "If the user did not name a video, call again without video_id.")
 
 
-def _pick_video(conn, video_id):
-    """Возвращает (video_id, ошибка). Без video_id допустимо только одно видео с срезами."""
+def _resolve_video(conn, video_id):
+    """Возвращает (video_id, ошибка, пометка).
+
+    Выдуманный моделью video_id (в вопросе видео не названо) при единственном видео в архиве заменяется этим видео,
+    и в ответе остаётся пометка об этом. При нескольких видео неизвестный video_id остаётся честной ошибкой.
+    Без video_id допустимо только одно видео с срезами."""
     vids = _videos(conn)
     if video_id:
-        if video_id not in vids:
-            return None, _unknown_video(video_id, vids)
-        return video_id, None
+        if video_id in vids:
+            return video_id, None, None
+        if len(vids) == 1:
+            return vids[0], None, (f"video_id '{video_id}' not found; used the only video in the archive: {vids[0]}")
+        default = config.default_video_id()
+        if default in vids:
+            return default, None, f"video_id '{video_id}' not found; used the default video from config: {default}"
+        return None, _unknown_video(video_id, vids), None
     if len(vids) == 1:
-        return vids[0], None
+        return vids[0], None, None
     if not vids:
-        return None, None
-    return None, f"в архиве несколько видео ({', '.join(vids)}); укажите video_id"
+        return None, None, None
+    default = config.default_video_id()
+    if default in vids:
+        return default, None, f"no video_id given; used the default video from config: {default}"
+    return None, f"в архиве несколько видео ({', '.join(vids)}); укажите video_id", None
+
+
+def _pick_video(conn, video_id):
+    vid, err, _ = _resolve_video(conn, video_id)
+    return vid, err
 
 
 # ---------- функции агента ----------
@@ -239,12 +318,14 @@ def search_by_clothing(color=None, clothing_type=None, video_id=None, t_from=Non
     if t_from is not None and t_to is not None and t_from > t_to:
         raise _InputError("t_from не может быть больше t_to")
     want_color = normalize_color(color) if color else None
-    want_type = canonical_type(clothing_type) if clothing_type else None
+    want_types = type_set(clothing_type) if clothing_type else None
+    want_type = "/".join(sorted(want_types)) if want_types else None
 
+    vnote = None
     if video_id:
-        vids = _videos(conn)
-        if video_id not in vids:
-            return {"ok": False, "error": _unknown_video(video_id, vids)}
+        video_id, err, vnote = _resolve_video(conn, video_id)
+        if err:
+            return {"ok": False, "error": err}
     snaps = _load(conn, video_id, t_from, t_to)
     matches, uncertain, undescribed, people_matched = [], 0, 0, 0
     for s in snaps:
@@ -256,7 +337,7 @@ def search_by_clothing(color=None, clothing_type=None, video_id=None, t_from=Non
             color_unknown = want_color and normalize_color(p["clothing_color"] or "unknown") == "unknown"
             type_unknown = want_type and canonical_type(p["clothing_type"] or "unknown") == "unknown"
             ok_c = (not want_color) or color_matches(want_color, p["clothing_color"])
-            ok_t = (not want_type) or type_matches(want_type, p["clothing_type"])
+            ok_t = (not want_types) or type_matches(want_types, p["clothing_type"])
             if ok_c and ok_t:
                 hit.append(p)
             elif color_unknown or type_unknown:
@@ -269,6 +350,8 @@ def search_by_clothing(color=None, clothing_type=None, video_id=None, t_from=Non
            "matches": matches[:MAX_MATCHES], "snapshots_checked": len(snaps),
            "uncertain_people": uncertain, "snapshots_not_described": undescribed,
            "query": {"color": want_color, "clothing_type": want_type}}
+    if vnote:
+        res["video_id_note"] = vnote
     if not snaps:
         res["note"] = "no snapshots in the archive for this filter: the answer is 'not found'"
     elif not matches and (uncertain or undescribed):
@@ -283,7 +366,7 @@ def count_people_at(t=None, video_id=None, conn=None):
     t = _opt_num("t", t, 0)
     if t is None:
         raise _InputError("t: нужно число секунд от начала видео")
-    vid, err = _pick_video(conn, _opt_str("video_id", video_id))
+    vid, err, vnote = _resolve_video(conn, _opt_str("video_id", video_id))
     if err:
         return {"ok": False, "error": err}
     snaps = _load(conn, vid) if vid else []
@@ -291,16 +374,19 @@ def count_people_at(t=None, video_id=None, conn=None):
         return {"ok": True, "found": False, "requested_t": t, "video_id": vid,
                 "note": "no snapshots for this video: the answer is 'not found'"}
     best = min(snaps, key=lambda s: (abs(s["t"] - t), s["t"]))   # при равенстве берём более ранний
-    return {"ok": True, "found": True, "video_id": best["video_id"], "requested_t": t,
-            "snapshot_id": best["snapshot_id"], "t": best["t"], "distance_sec": round(abs(best["t"] - t), 3),
-            "people_count": best["people_count"], "frame_path": best["frame_path"],
-            "people": best["people"]}
+    res = {"ok": True, "found": True, "video_id": best["video_id"], "requested_t": t,
+           "snapshot_id": best["snapshot_id"], "t": best["t"], "distance_sec": round(abs(best["t"] - t), 3),
+           "people_count": best["people_count"], "frame_path": best["frame_path"],
+           "people": best["people"]}
+    if vnote:
+        res["video_id_note"] = vnote
+    return res
 
 
 @_safe
 def get_snapshot_summary(video_id=None, conn=None):
     """Весь архив срезов видео: людей на каждом срезе, максимум (и когда), среднее."""
-    vid, err = _pick_video(conn, _opt_str("video_id", video_id))
+    vid, err, vnote = _resolve_video(conn, _opt_str("video_id", video_id))
     if err:
         return {"ok": False, "error": err}
     snaps = _load(conn, vid) if vid else []
@@ -312,9 +398,12 @@ def get_snapshot_summary(video_id=None, conn=None):
     items = [{"snapshot_id": s["snapshot_id"], "t": s["t"], "people_count": s["people_count"],
               "frame_path": s["frame_path"], "described": bool(s["people"]) or s["people_count"] == 0,
               "people": s["people"]} for s in snaps]
-    return {"ok": True, "video_id": snaps[0]["video_id"], "snapshots_count": len(snaps),
-            "max_people": top, "max_people_t": [s["t"] for s in snaps if s["people_count"] == top],
-            "avg_people": round(sum(counts) / len(counts), 2), "snapshots": items}
+    res = {"ok": True, "video_id": snaps[0]["video_id"], "snapshots_count": len(snaps),
+           "max_people": top, "max_people_t": [s["t"] for s in snaps if s["people_count"] == top],
+           "avg_people": round(sum(counts) / len(counts), 2), "snapshots": items}
+    if vnote:
+        res["video_id_note"] = vnote
+    return res
 
 
 def list_snapshot_videos(conn=None):

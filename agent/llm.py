@@ -22,12 +22,14 @@ _LOOPBACK = ("localhost", "127.0.0.1", "::1")
 
 
 class OpenAICompatClient:
-    def __init__(self, base_url=None, model=None, api_key=None, timeout=120,
-                 temperature=0.0, max_tokens=512):
+    def __init__(self, base_url=None, model=None, api_key=None, timeout=None,
+                 temperature=0.0, max_tokens=None):
         self.base_url = (base_url or config.llm_base_url()).rstrip("/")
         self.model = config.llm_model() if model is None else model
         self.api_key = api_key or config.llm_api_key()
-        self.timeout, self.temperature, self.max_tokens = timeout, temperature, max_tokens
+        self.timeout = config.llm_timeout() if timeout is None else timeout
+        self.temperature = temperature
+        self.max_tokens = config.llm_max_tokens() if max_tokens is None else max_tokens
 
     def chat(self, messages, tools=None):
         """Один запрос к модели. Возвращает сообщение ассистента (dict с content и tool_calls)."""
