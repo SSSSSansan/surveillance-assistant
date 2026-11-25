@@ -1,0 +1,2 @@
+﻿run,question,expected,ok,tool_calls,tools,arguments,seconds,foreign_script,answer,error
+1,Был ли кто-то в красной футболке?,no,False,1,search_by_clothing,"{""color"": ""red"", ""t_from"": 0, ""t_to"": 1200}",45.416,False,"Да. Найдено на срезах: 60 с, 120 с, 150 с, 180 с, 210 с, 240 с, 270 с, 300 с.",

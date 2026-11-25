@@ -29,14 +29,14 @@ def format_time(ev):
     a, b = ev.get("t_start"), ev.get("t_end")
     if a is None:
         return ""
-    return f"{a:g} с" if b is None or b == a else f"{a:g}–{b:g} с"
+    return f"{a:g} s" if b is None or b == a else f"{a:g}–{b:g} s"
 
 
 def event_row(ev):
     """Строка таблицы событий для интерфейса."""
-    return {"event": ev.get("event_id"), "video": ev.get("video_id"), "тип": ev.get("event_type"),
-            "человек": ev.get("track_id"), "зона": ev.get("zone_id"), "время": format_time(ev),
-            "описание VLM": ev.get("vlm_description") or ""}
+    return {"event": ev.get("event_id"), "video": ev.get("video_id"), "type": ev.get("event_type"),
+            "person": ev.get("track_id"), "zone": ev.get("zone_id"), "time": format_time(ev),
+            "VLM description": ev.get("vlm_description") or ""}
 
 
 def safe_clip_path(clip_path, root):

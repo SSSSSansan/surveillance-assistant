@@ -29,9 +29,10 @@ conn = make_demo_db()
 print("== схемы инструментов ==")
 specs = tool_schemas.to_openai_tools()
 names = [s["function"]["name"] for s in specs]
-check("ровно шесть обычных функций",
+check("девять обычных функций: шесть из этапа 1 и три из этапа 2",
       names == ["query_events", "count_events", "get_track_timeline", "get_event_details",
-                "list_zones_cameras", "search_descriptions"], names)
+                "list_zones_cameras", "search_descriptions", "search_by_clothing", "count_people_at",
+                "get_snapshot_summary"], names)
 check("debug-функции модели не показываются", not any(n.startswith("debug") for n in names))
 FORBIDDEN = {"conn", "vlm_variant", "view", "embedder", "model", "min_score", "include_rejected"}
 for s in specs:
@@ -100,7 +101,7 @@ r = runner.run_agent("Привет", Scripted(ans("Здравствуйте")), 
 check("ответ без функций", r.answer == "Здравствуйте" and r.steps == [] and r.error is None)
 
 c = Scripted(call("count_events", '{"event_type": "enter"}'), ans("4"))
-r = runner.run_agent("Сколько входов?", c, conn)
+r = runner.run_agent("Опиши входы", c, conn)
 check("функция -> ответ", r.answer == "4" and len(r.steps) == 1 and r.steps[0].result["count"] == 4, r)
 hist = c.seen[1]
 check("история: system, user, assistant(tool_calls), tool",
@@ -110,7 +111,7 @@ check("системный промпт: функции, «не нашёл», «�
       all(x in hist[0]["content"] for x in ("count_events", "не нашёл", "ответить нельзя: в базе нет этих данных")))
 
 c = Scripted(call("query_events", {"event_type": "pick_up"}), ans("Да"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 tool_msg = json.loads(c.seen[1][3]["content"])
 check("аргументы-словарь (не строка) принимаются", r.answer == "Да" and r.steps[0].arguments == {"event_type": "pick_up"})
 check("модель видит событие без служебных полей",
@@ -121,30 +122,30 @@ m = {"role": "assistant", "content": "", "tool_calls": [
     {"id": "a", "type": "function", "function": {"name": "count_events", "arguments": '{"event_type": "enter"}'}},
     {"id": "b", "type": "function", "function": {"name": "count_events", "arguments": '{"event_type": "exit"}'}}]}
 c = Scripted(m, ans("4 и 3"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 check("несколько вызовов в одном сообщении: оба выполнены, tool-сообщения с их id",
       len(r.steps) == 2 and [x["tool_call_id"] for x in c.seen[1][3:]] == ["a", "b"]
       and [s.result["count"] for s in r.steps] == [4, 3])
 
 c = Scripted(call("count_events", "{не json"), ans("не получилось"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 check("битый JSON аргументов: ошибка возвращена модели, цикл продолжается",
       r.answer == "не получилось" and json.loads(c.seen[1][3]["content"])["ok"] is False and r.error is None)
 
 c = Scripted(call("rm_rf", "{}"), ans("ок"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 check("неизвестная функция от модели: ошибка модели, цикл продолжается",
       r.answer == "ок" and "неизвестная функция" in json.loads(c.seen[1][3]["content"])["error"])
 
 c = Scripted(*[call("count_events", "{}", f"c{i}") for i in range(10)])
-r = runner.run_agent("q", c, conn, max_steps=3)
+r = runner.run_agent("вопрос", c, conn, max_steps=3)
 check("лимит шагов: ошибка, не зависание", r.error and "3 шагов" in r.error and r.answer is None and len(r.steps) == 3, r.error)
 
-r = runner.run_agent("q", Scripted(LLMError("модель недоступна")), conn)
+r = runner.run_agent("вопрос", Scripted(LLMError("модель недоступна")), conn)
 check("ошибка модели -> result.error, без исключения", r.error == "модель недоступна" and r.answer is None)
-r = runner.run_agent("q", Scripted(ans("   ")), conn)
+r = runner.run_agent("вопрос", Scripted(ans("   ")), conn)
 check("пустой ответ модели -> ошибка", r.error and "пуст" in r.error)
-r = runner.run_agent("q", Scripted(ans("<think>рассуждаю...</think>Да")), conn)
+r = runner.run_agent("вопрос", Scripted(ans("<think>рассуждаю...</think>Да")), conn)
 check("блок <think> вырезается из ответа", r.answer == "Да", r.answer)
 check("strip_think: незакрытое начало", runner.strip_think("рассуждение</think>Ответ") == "Ответ")
 
@@ -156,7 +157,7 @@ with fake_llm.FakeOpenAIServer(fake_llm.WrongToolClient()) as srv:
     body, hdr = srv.requests[0], srv.headers[0]
     check("в запросе: модель, сообщения, tools, tool_choice, temperature 0",
           body["model"] == "test-model" and body["messages"][0]["content"] == "Привет"
-          and len(body["tools"]) == 6 and body["tool_choice"] == "auto" and body["temperature"] == 0.0, body.keys())
+          and len(body["tools"]) == 9 and body["tool_choice"] == "auto" and body["temperature"] == 0.0, body.keys())
     check("кириллица передаётся без искажений", body["messages"][0]["content"] == "Привет")
     check("заголовок Authorization", hdr.get("Authorization") == "Bearer k123")
     check("tool_calls разобраны", msg["tool_calls"][0]["function"]["name"] == "count_events")
@@ -177,7 +178,7 @@ with fake_llm.FakeOpenAIServer(fake_llm.WrongToolClient()) as srv:
         cl.chat([{"role": "user", "content": "x"}])
         check("неверная форма ответа -> LLMError", False)
     except LLMError as e:
-        check("неверная форма ответа -> LLMError", "формат" in str(e), e)
+        check("неверная форма ответа -> LLMError", "format" in str(e), e)
 
 import socket
 s = socket.socket(); s.bind(("127.0.0.1", 0)); free_port = s.getsockname()[1]; s.close()
@@ -185,14 +186,14 @@ try:
     OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3).chat([{"role": "user", "content": "x"}])
     check("недоступный сервер -> LLMError", False)
 except LLMError as e:
-    check("недоступный сервер -> LLMError с понятным текстом", "не удалось подключиться" in str(e), e)
+    check("недоступный сервер -> LLMError с понятным текстом", "could not connect" in str(e), e)
 try:
     OpenAICompatClient(base_url="http://127.0.0.1:1/v1", model="").chat([])
     check("без модели -> LLMError", False)
 except LLMError as e:
-    check("без модели -> LLMError", "модель" in str(e))
-r = runner.run_agent("q", OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3), conn)
-check("недоступная модель через run_agent -> result.error", r.error and "подключиться" in r.error)
+    check("без модели -> LLMError", "model" in str(e))
+r = runner.run_agent("вопрос", OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3), conn)
+check("недоступная модель через run_agent -> result.error", r.error and "connect" in r.error)
 
 # ---------- грейдер ----------
 print("== грейдер ==")
@@ -243,10 +244,12 @@ check("по типам: все шесть типов", sorted(s["by_type"]) == [
 
 n_count = sum(1 for r in ROWS if r["expected_tool"] == "count_events")
 s2 = eval_agent.summarize(eval_agent.evaluate(fake_llm.WrongToolClient(), ROWS, conn))
-check("модель с неверной функцией: верна только там, где ждали count_events",
-      s2["tool_ok"] == n_count and s2["args_ok"] == 0 and s2["answer_ok"] < 10, s2)
-s3 = eval_agent.summarize(eval_agent.evaluate(fake_llm.NoToolClient(), ROWS, conn))
 n_none = sum(1 for r in ROWS if r["expected_tool"] == "none")
+check("модель с неверной функцией: верна только там, где ждали count_events, и на вопросах вне базы "
+      "(на них код отвечает «ответить нельзя» сам, модель не вызывается)",
+      s2["tool_ok"] == n_count + n_none and s2["args_ok"] == n_none and s2["by_type"]["out_of_scope"]["answer_ok"] == n_none
+      and s2["answer_ok"] < 10, s2)
+s3 = eval_agent.summarize(eval_agent.evaluate(fake_llm.NoToolClient(), ROWS, conn))
 check("модель без функций: «функция верна» только для вопросов вне базы",
       s3["tool_ok"] == n_none and s3["answer_ok"] < 12, s3)
 with fake_llm.FakeOpenAIServer(fake_llm.OracleClient(ROWS)) as srv:
@@ -273,9 +276,9 @@ steps = [types.SimpleNamespace(result={"events": [{"event_id": "e1", "video_id":
          types.SimpleNamespace(result={"ok": False, "error": "x"}), types.SimpleNamespace(result="строка")]
 ev = ui_helpers.collect_events(steps)
 check("события собраны из events/event/results без повторов, по порядку", [e["event_id"] for e in ev] == ["e1", "e2", "e3"])
-check("format_time", ui_helpers.format_time({"t_start": 12.4, "t_end": 14.0}) == "12.4–14 с"
-      and ui_helpers.format_time({"t_start": 5.0, "t_end": 5.0}) == "5 с" and ui_helpers.format_time({}) == "")
-check("event_row содержит время и описание", ui_helpers.event_row({"event_id": "e1", "t_start": 1.0, "t_end": 2.0, "vlm_description": "d"})["время"] == "1–2 с")
+check("format_time", ui_helpers.format_time({"t_start": 12.4, "t_end": 14.0}) == "12.4–14 s"
+      and ui_helpers.format_time({"t_start": 5.0, "t_end": 5.0}) == "5 s" and ui_helpers.format_time({}) == "")
+check("event_row contains time and description", ui_helpers.event_row({"event_id": "e1", "t_start": 1.0, "t_end": 2.0, "vlm_description": "d"})["time"] == "1–2 s")
 
 with tempfile.TemporaryDirectory() as d:
     root = Path(d) / "root"
@@ -333,57 +336,7 @@ with tempfile.TemporaryDirectory() as d:
     )
 
 
-# ---------- скрипт страницы на заглушке streamlit ----------
-print("== agent/app.py на ЗАГЛУШКЕ streamlit (не настоящий Streamlit) ==")
-APP = str(Path(__file__).resolve().parents[1] / "agent" / "app.py")
-
-
-class SS(dict):
-    __getattr__ = dict.get
-    def __setattr__(self, k, v): self[k] = v
-
-
-def run_app(question, base_url, clips_root, session, click=False):
-    st = mock.MagicMock()
-    st.session_state = session
-    st.cache_resource = lambda f: f
-    st.text_input.side_effect = lambda label, value="", **kw: question if label.startswith("Вопрос") else (
-        clips_root if label.startswith("Папка") else value)
-    st.selectbox.side_effect = lambda label, options, **kw: options[0]
-    st.form_submit_button.return_value = True
-    st.button.return_value = click
-    env = {"LLM_BASE_URL": base_url, "LLM_MODEL": "oracle"}
-    with mock.patch.dict(sys.modules, {"streamlit": st}), mock.patch.dict(os.environ, env):
-        runpy.run_path(APP, run_name="__main__")
-    return st
-
-
-with fake_llm.FakeOpenAIServer(fake_llm.OracleClient(ROWS)) as srv, tempfile.TemporaryDirectory() as d:
-    (Path(d) / "clips").mkdir()
-    (Path(d) / "clips" / "test_video_01_e0013.mp4").write_bytes(b"video")
-    sess = SS()
-    st = run_app("Сколько раз кто-то входил?", srv.url, d, sess)
-    check("страница: ответ показан", any(c.args and c.args[0] == "4" for c in st.write.call_args_list), st.write.call_args_list)
-    check("страница: ошибок нет, таблицы событий для подсчёта нет", not st.error.called and not st.dataframe.called)
-    check("страница: вызовы функций показаны в expander", st.expander.called and st.code.called)
-
-    sess = SS()
-    st = run_app("Когда был оставлен предмет?", srv.url, d, sess)
-    table = st.dataframe.call_args.args[0]
-    check("страница: таблица событий со временем", table and table[0]["время"] == "95–120 с" and table[0]["event"] == "e0013", table)
-    check("страница: кнопка просмотра клипа создана", st.button.called and "e0013" in st.button.call_args.args[0])
-    check("страница: клип не показан до нажатия", not st.video.called)
-    st = run_app("Когда был оставлен предмет?", srv.url, d, sess, click=True)
-    check("страница: после нажатия показан клип из безопасной папки",
-          st.video.called and st.video.call_args.args[0].endswith("test_video_01_e0013.mp4"), st.video.call_args)
-    with tempfile.TemporaryDirectory() as empty:
-        sess2 = SS()
-        run_app("Когда был оставлен предмет?", srv.url, empty, sess2)
-        st = run_app("Когда был оставлен предмет?", srv.url, empty, sess2, click=True)
-        check("страница: клипа нет -> предупреждение, а не падение", st.warning.called and not st.video.called)
-st = run_app("Сколько раз кто-то входил?", "http://127.0.0.1:%d/v1" % free_port, d, SS())
-check("страница: модель недоступна -> сообщение об ошибке, скрипт не падает", st.error.called and "подключиться" in st.error.call_args.args[0])
-check("страница: пустой вопрос ничего не запускает", not run_app("   ", "http://127.0.0.1:1/v1", d, SS()).error.called)
+# Проверки страниц Streamlit (чат и архив, на заглушке streamlit) лежат в eval/test_design.py
 
 print(f"\nИТОГО провалов: {FAILS}")
 sys.exit(1 if FAILS else 0)

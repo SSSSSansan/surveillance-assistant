@@ -24,6 +24,14 @@ CANNOT = re.compile(r"нельзя|нет\s+(?:этих\s+)?(?:данных|ин
                     r"don't\s+have|do\s+not\s+have", re.I)
 
 
+_DEC_COMMA = re.compile(r"(?<=\d),(?=\d{1,2}(?!\d))")
+
+
+def _decimal(text):
+    """«12,4 секунды» -> «12.4 секунды»: русские ответы пишут десятичную запятую. Список «270, 300» не трогается."""
+    return _DEC_COMMA.sub(".", text or "")
+
+
 def _first_word(text):
     m = re.match(r"\W*([^\W\d_]+)", (text or "").lower())
     return m.group(1) if m else ""
@@ -50,7 +58,7 @@ def _match_count(expected, got, tol):
 
 def grade(row, answer, time_tol=0.0):
     """row: строка questions.csv. Возвращает {"correct": bool, "detail": str, ...}."""
-    answer = (answer or "").strip()
+    answer = _decimal((answer or "").strip())
     expected = row["expected_answer"].strip()
     qtype = row["type"]
     if not answer:
@@ -119,7 +127,11 @@ def normalize_args(args):
             v = float(v)
         elif isinstance(v, str):
             v = v.strip()
-            if k in ("event_type", "zone_id", "order", "mode"):
+            try:                       # "7" вместо 7: функции принимают числа строкой, это не ошибка выбора аргументов
+                v = float(v)
+            except ValueError:
+                pass
+            if isinstance(v, str) and k in ("event_type", "zone_id", "order", "mode"):
                 v = v.lower()
         if k == "order" and v == "asc":
             continue

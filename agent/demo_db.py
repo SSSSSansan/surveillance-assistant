@@ -28,12 +28,18 @@ class Shim:
 
 
 def make_demo_db(embedder=None):
-    """Схема + seed.sql. Если передан embedder, считает эмбеддинги описаний (для semantic-поиска)."""
+    """Схема + seed.sql (+ срезы этапа 2, если файлы есть). Если передан embedder, считает эмбеддинги описаний (для semantic-поиска)."""
     raw = sqlite3.connect(":memory:", check_same_thread=False)
     raw.execute("PRAGMA foreign_keys = ON")
     for name in ("schema.sql", "seed.sql"):
         raw.executescript((DB_DIR / name).read_text(encoding="utf-8"))
     conn = Shim(raw)
+    if (DB_DIR / "schema_snapshots.sql").exists() and (DB_DIR / "seed_snapshots.json").exists():
+        from database import snapshots_loader      # этап 2: архив срезов с тестовыми данными
+        snapshots_loader.apply_schema(conn)
+        rep = snapshots_loader.load_snapshots_file(DB_DIR / "seed_snapshots.json", conn=conn)
+        if not rep["ok"]:
+            raise RuntimeError(f"тестовые срезы не загрузились: {rep['errors']}")
     if embedder is not None:
         from database import embeddings
         embeddings.build_embeddings(conn, embedder)

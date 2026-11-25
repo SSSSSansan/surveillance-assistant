@@ -1,0 +1,2 @@
+﻿run,question,expected,ok,tool_calls,tools,arguments,seconds,foreign_script,answer,error
+1,Был ли кто-то в синей кофте?,yes,True,1,search_by_clothing,"{""color"": ""blue"", ""clothing_type"": ""jacket"", ""video_id"": """"}",102.267,False,"Да. Найдено на срезах: 60 с, 150 с.",

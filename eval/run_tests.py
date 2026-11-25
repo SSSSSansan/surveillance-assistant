@@ -1,4 +1,3 @@
-
 """Пересобирает тестовые данные и запускает все тесты T5-T10.
 Код возврата 0 только если все прошли.
 Тесты идут на SQLite, на PostgreSQL не запускались.
@@ -18,6 +17,11 @@ STEPS = [
     "eval.test_loader",
     "eval.test_t10_tools",
     "eval.test_agent",
+    "eval.test_snapshots",
+    "eval.test_gold",
+     "eval.test_labeling",
+    "eval.test_design",
+    "eval.test_report",
 ]
 
 failed = []

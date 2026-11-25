@@ -1,0 +1,46 @@
+﻿id,type,lang,question,expected_answer,expected_tool,expected_args,first_tool,first_args,n_tool_calls,tool_ok,args_ok,answer,answer_ok,grade_detail,error,seconds
+q01,list,ru,Перечисли все входы.,человек 7 (12.4 с); человек 8 (60.1 с); человек 9 (150.2 с); человек 12 (200.0 с),query_events,"{""event_type"": ""enter""}",query_events,"{""order"": ""asc"", ""limit"": 200, ""event_type"": ""enter""}",1,True,False,Входов было 4.,False,"времена ответа [], ожидалось [12.4, 60.1, 150.2, 200.0]",,175.864
+q02,exists,en,Did anyone pick up an object?,да,query_events,"{""event_type"": ""pick_up""}",query_events,"{""event_type"": ""pick_up""}",1,True,True,Да.,True,"ответ: да, ожидалось: да",,113.986
+q03,exists,ru,Был ли оставленный предмет?,да,query_events,"{""event_type"": ""abandoned_object""}",query_events,"{""event_type"": ""abandoned_object""}",1,True,True,Да.,True,"ответ: да, ожидалось: да",,109.68
+q04,count,ru,Сколько раз кто-то входил?,4,count_events,"{""event_type"": ""enter""}",count_events,"{""event_type"": ""enter""}",1,True,True,Найдено событий: 4 (event_type=enter).,True,"первое число 4, ожидалось 4",,98.378
+q05,count,ru,Сколько было выходов?,3,count_events,"{""event_type"": ""exit""}",count_events,"{""event_type"": ""exit""}",1,True,True,Найдено событий: 3 (event_type=exit).,True,"первое число 3, ожидалось 3",,7.65
+q06,count,ru,Сколько всего событий произошло у стола?,10,count_events,"{""zone_id"": ""desk""}",count_events,"{""zone_id"": ""desk""}",1,True,True,Найдено событий: 10 (zone_id=desk).,True,"первое число 10, ожидалось 10",,8.744
+q07,count,en,How many events did person 7 have in total?,6,count_events,"{""track_id"": 7}",count_events,"{""track_id"": ""7""}",1,True,True,Events found: 6 (track_id=7).,True,"первое число 6, ожидалось 6",,8.64
+q08,count,ru,Сколько раз кто-то подходил к столу?,3,count_events,"{""event_type"": ""approach_zone"", ""zone_id"": ""desk""}",count_events,"{""event_type"": ""approach_zone"", ""zone_id"": ""desk""}",1,True,True,"Найдено событий: 3 (event_type=approach_zone, zone_id=desk).",True,"первое число 3, ожидалось 3",,10.941
+q09,count,ru,Сколько раз кто-то входил в первые 100 секунд?,2,count_events,"{""event_type"": ""enter"", ""t_from"": 0, ""t_to"": 100}",count_events,"{""event_type"": ""enter"", ""t_from"": ""0"", ""t_to"": ""100""}",1,True,True,"Найдено событий: 2 (event_type=enter, t=0–100).",True,"первое число 2, ожидалось 2",,12.35
+q10,list,en,List all events of person 9.,enter (150.2 с); exit (155.0 с),get_track_timeline,"{""track_id"": 9}",get_track_timeline,"{""track_id"": 9}",1,True,True,"The events of person 9 are:
+
+1. Entered the door at 150.2 seconds
+2. Exited the door at 155.0 seconds",True,"времена ответа [150.2, 155.0], ожидалось [150.2, 155.0]",,27.366
+q11,time,ru,Когда было первое событие?,12.4 с,query_events,"{""order"": ""asc"", ""limit"": 1}",query_events,"{""order"": ""asc"", ""limit"": ""1""}",1,True,True,"Первое событие произошло в 12,4 секунды.",True,"времена в ответе [12.4], ожидалось 12.4 (допуск 0.0)",,117.969
+q12,time,ru,Когда человек 8 вошёл?,60.1 с,query_events,"{""event_type"": ""enter"", ""track_id"": 8}",query_events,"{""track_id"": ""8"", ""event_type"": ""enter"", ""order"": ""asc"", ""limit"": ""1""}",1,True,False,"Да, человек 8 вошёл в 60,1 секунды.",True,"времена в ответе [60.1], ожидалось 60.1 (допуск 0.0)",,119.36
+q13,time,ru,Когда был последний выход?,155.0 с,query_events,"{""event_type"": ""exit"", ""order"": ""desc"", ""limit"": 1}",query_events,"{""order"": ""desc"", ""limit"": 1, ""event_type"": ""exit""}",1,True,True,"Последний выход произошел в видео ""test_video_01"" на отметке 155.0 секунд.",True,"времена в ответе [155.0], ожидалось 155.0 (допуск 0.0)",,119.269
+q14,time,en,When was the object picked up?,24.0 с,query_events,"{""event_type"": ""pick_up""}",query_events,"{""event_type"": ""pick_up"", ""order"": ""asc"", ""limit"": 1}",1,True,False,The object was picked up at 24.0 seconds.,True,"времена в ответе [24.0], ожидалось 24.0 (допуск 0.0)",,116.868
+q15,time,ru,Когда был оставлен предмет?,95.0 с,query_events,"{""event_type"": ""abandoned_object""}",query_events,"{""order"": ""asc"", ""limit"": 1, ""event_type"": ""abandoned_object""}",1,True,False,Предмет был оставлен в 95 секунд.,True,"времена в ответе [95.0], ожидалось 95.0 (допуск 0.0)",,116.96
+q16,sequence,ru,Что было сразу после первого входа?,approach_zone (15.0 с),get_track_timeline,"{""track_id"": 7}",get_track_timeline,"{""order"": ""asc"", ""track_id"": ""1""}",1,True,False,"Похоже, что функция get_track_timeline не принимает аргументы 'order'. Давайте попробуем вызвать функцию без аргумента 'order'.
+
+{""name"": ""get_track_timeline"", ""parameters"": {""track_id"": ""1"", ""video_id"": ""video_1""}}",False,"времена ответа [], ожидалось [15.0]",,211.013
+q17,sequence,ru,"Что делал человек 7 после того, как взял предмет?","leave_zone (35.0 с), затем exit (41.2 с)",get_track_timeline,"{""track_id"": 7}",get_track_timeline,"{""track_id"": 7, ""order"": ""asc""}",1,True,True,"Похоже, что функция get_track_timeline не принимает аргументы 'order'. Давайте попробуем вызвать функцию без аргумента 'order'.
+
+{""name"": ""get_track_timeline"", ""parameters"": {""track_id"":7,""video_id"":""video_id""}}",False,"времена ответа [], ожидалось [35.0, 41.2]",,135.31
+q18,sequence,en,What happened right after person 8 put the object down?,leave_zone (74.0 с),get_track_timeline,"{""track_id"": 8}",get_track_timeline,"{""track_id"": ""8""}",1,True,True,"Based on the tool results, right after person 8 put the object down, they left the desk zone and exited the door zone. 
+
+Here is the timeline of events:
+
+- Person 8 put the object down at t_start = 70.5 seconds.
+- Immediately after, at t_start = 74.0 seconds, person 8 left the desk zone.
+- At t_start = 78.0 seconds, person 8 exited the door zone.
+
+Note that there is a 4.5-second gap between the put_down event and the leave_zone event, and a 4-second gap between the leave_zone event and the exit event.",False,"времена ответа [70.5, 74.0, 78.0], ожидалось [74.0]",,178.247
+q19,exists,ru,Выходил ли человек 12?,нет,query_events,"{""event_type"": ""exit"", ""track_id"": 12}",query_events,"{""track_id"": ""12"", ""event_type"": ""exit"", ""order"": ""asc"", ""limit"": ""1""}",1,True,False,Нет.,True,"ответ: нет, ожидалось: нет",,120.634
+q20,exists,ru,Брал ли что-нибудь человек 12?,нет,query_events,"{""event_type"": ""pick_up"", ""track_id"": 12}",count_events,"{""event_type"": ""pick_up"", ""track_id"": 12}",1,False,False,Нет.,True,"ответ: нет, ожидалось: нет",,116.74
+q21,exists,ru,Подходил ли человек 9 к столу?,нет,query_events,"{""event_type"": ""approach_zone"", ""track_id"": 9, ""zone_id"": ""desk""}",query_events,"{""event_type"": ""approach_zone"", ""zone_id"": ""desk"", ""track_id"": ""9"", ""order"": ""asc"", ""limit"": ""1""}",1,True,False,Нет.,True,"ответ: нет, ожидалось: нет",,198.712
+q22,exists,en,Did anyone enter between 20 and 55 seconds?,нет,query_events,"{""event_type"": ""enter"", ""t_from"": 20, ""t_to"": 55}",query_events,"{""t_from"": ""20"", ""t_to"": ""55"", ""event_type"": ""enter"", ""order"": ""asc""}",1,True,True,Нет.,True,"ответ: нет, ожидалось: нет",,117.932
+q23,exists,ru,Был ли оставленный предмет до 90-й секунды?,нет,query_events,"{""event_type"": ""abandoned_object"", ""t_to"": 90}",query_events,"{""event_type"": ""abandoned_object"", ""t_to"": ""90"", ""order"": ""asc""}",1,True,True,Нет.,True,"ответ: нет, ожидалось: нет",,110.137
+q24,exists,en,Did anyone put something down before 60 seconds?,нет,query_events,"{""event_type"": ""put_down"", ""t_to"": 60}",query_events,"{""event_type"": ""put_down"", ""t_from"": ""0"", ""t_to"": ""60"", ""order"": ""asc""}",1,True,True,Нет.,True,"ответ: нет, ожидалось: нет",,115.509
+q25,exists,ru,Были ли события с человеком 99?,нет,query_events,"{""track_id"": 99}",query_events,"{""track_id"": ""99"", ""order"": ""asc"", ""limit"": ""50""}",1,True,True,Нет.,True,"ответ: нет, ожидалось: нет",,109.78
+q26,time,ru,Когда человек 12 вышел?,не нашёл,query_events,"{""event_type"": ""exit"", ""track_id"": 12}",query_events,"{""limit"": ""1"", ""track_id"": ""12"", ""event_type"": ""exit"", ""order"": ""asc""}",1,True,False,"Нет, человек 12 не вышел.",False,ожидалось «не нашёл»,,116.346
+q27,exists,en,Was there an exit after 160 seconds?,нет,query_events,"{""event_type"": ""exit"", ""t_from"": 160}",,,0,False,False,,False,timeout after 600.0 s while calling http://localhost:11434/v1/chat/completions,timeout after 600.0 s while calling http://localhost:11434/v1/chat/completions,739.693
+q28,out_of_scope,ru,Какого цвета куртка у человека 7?,ответить нельзя: в базе нет этих данных,none,{},,,0,True,True,Ответить нельзя: в базе нет этих данных (одежда относится к срезам и не привязана к конкретному человеку (track_id)).,True,ответ «нельзя» найден,,0.0
+q29,out_of_scope,ru,Сколько входов было на камере cam02?,ответить нельзя: в базе нет этих данных,none,{},,,0,True,True,Ответить нельзя: в базе нет этих данных (камеры cam02 нет в базе).,True,ответ «нельзя» найден,,0.0
+q30,out_of_scope,en,Why did person 8 leave the object on the desk?,ответить нельзя: в базе нет этих данных,none,{},,,0,True,True,"Cannot answer: the archive has no such data (the archive holds events and snapshots, not reasons or intentions).",True,ответ «нельзя» найден,,0.0

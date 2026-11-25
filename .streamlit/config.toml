@@ -1,0 +1,11 @@
+# Streamlit theme: light, matches the palette in agent/ui_theme.py (PALETTES["light"]).
+# The file is read when Streamlit is started from the project root: python -m streamlit run agent/app.py
+[theme]
+base = "light"
+backgroundColor = "#F5F8FC"
+secondaryBackgroundColor = "#FFFFFF"
+primaryColor = "#3978E8"
+textColor = "#1E293B"
+
+[client]
+toolbarMode = "minimal"
