@@ -349,6 +349,39 @@ def test_cleanup_also_removes_flashinfer_cache_outside_work(tmp_path):
     assert not fi.exists() and (tmp_path / ".cache/other").exists()
 
 
+def test_cleanup_removes_orphan_blobs_and_locks_only_when_no_model_left(tmp_path):
+    mine, keep = _fake_home(tmp_path)
+    hub = tmp_path / "work/hf_cache/hub"
+    for d in (hub / "blobs", hub / ".locks/models--Qwen--Qwen3-VL-4B-Instruct"):
+        d.mkdir(parents=True)
+        (d / "f").write_text("x")
+    # another model is still in hub -> blobs/.locks stay, no extra question
+    r = _cleanup(tmp_path, "yes\nyes\n")
+    assert r.returncode == 0 and (hub / "blobs").exists() and (hub / ".locks").exists() and "Осиротевшие" not in r.stdout
+    # last model removed, but the answer to the second question is not yes -> kept
+    r = _cleanup(tmp_path, "yes\nno\n", "Other/Keep")
+    assert r.returncode == 0 and "Осиротевшие" in r.stdout and (hub / "blobs").exists() and (hub / ".locks").exists()
+    # a model is downloaded and removed again; hub then has no models--* -> removed after yes; the rest stays
+    mine[0].mkdir(parents=True)
+    r = _cleanup(tmp_path, "yes\nyes\n")
+    assert r.returncode == 0 and not (hub / "blobs").exists() and not (hub / ".locks").exists()
+    assert hub.exists() and (tmp_path / "work/data").exists() and (tmp_path / "work/runs").exists()
+
+
+def test_cleanup_orphans_never_follow_symlinks(tmp_path):
+    _fake_home(tmp_path)
+    hub = tmp_path / "work/hf_cache/hub"
+    for d in hub.glob("models--*"):
+        import shutil
+        shutil.rmtree(d)
+    foreign = tmp_path / "foreign_blobs"
+    foreign.mkdir()
+    (foreign / "f").write_text("x")
+    (hub / "blobs").symlink_to(foreign)
+    r = _cleanup(tmp_path, "yes\nyes\n")
+    assert r.returncode == 0 and (foreign / "f").exists() and (hub / "blobs").is_symlink() and "Не трогаю" in r.stdout
+
+
 def test_cleanup_rejects_bad_repo_name(tmp_path):
     mine, _ = _fake_home(tmp_path)
     assert _cleanup(tmp_path, "yes\n", "../../etc").returncode == 2 and all(d.exists() for d in mine)
@@ -586,3 +619,70 @@ def test_check_fewshot_script(tmp_path):
     bad = tmp_path / "g.json"
     bad.write_text(json.dumps({"examples": [{**ex, "clothing_color": "navy"}, ex]}))
     assert subprocess.run([sys.executable, chk, str(bad)], capture_output=True).returncode == 1
+
+
+# ----------------------------------------------------------- summarize_runs ---
+def _jl(path, rows, extra_lines=()):
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows) + "".join(extra_lines))
+
+
+def _crop(i, color, typ, sec, status="ok", new=False):
+    r = {"video_id": "v", "snapshot_id": "sn_0000", "person_idx": i, "box_h": 100,
+         "record": {"color": color, "type": typ, "method": "vlm:m", "mode": "crop", "prompt_variant": "A"}
+         if status == "ok" else None, "seconds": sec, "status": status, "error": None}
+    if new:
+        r.update(raw_response="{}", finish_reason="length" if status == "truncated" else "stop", suspicious=False)
+    return r
+
+
+def test_summarize_runs_old_and_new_formats(tmp_path):
+    from eval import summarize_runs as S
+    d = tmp_path / "server_runs"
+    d.mkdir()
+    # old R1 A + its repeat: 4 people, color agrees 3/4, type 4/4 (person 3 is error in pass 1 -> not a pair)
+    _jl(d / "pred_clothing_m_R1_A.jsonl", [_crop(0, "black", "coat", 1.0), _crop(1, "unknown", "coat", 2.0),
+                                          _crop(2, "red", "jacket", 3.0), _crop(3, None, None, None, status="error")])
+    _jl(d / "pred_clothing_m_R1_A_repeat2.jsonl", [_crop(0, "black", "coat", 1.0), _crop(1, "gray", "coat", 1.0),
+                                                  _crop(2, "red", "jacket", 1.0), _crop(3, "red", "coat", 1.0)])
+    # new R1 D with one truncated line and a broken line
+    _jl(d / "pred_clothing_m_R1_D.jsonl", [_crop(0, "black", "coat", 2.0, new=True),
+                                          _crop(1, None, None, 4.0, status="truncated", new=True)], ["{broken\n"])
+    # old count R3 (no suspicious field) and new count R3 with a tag
+    old = [{"snapshot_id": f"s{i}", "mode": "frame-list", "model": "m", "people_count": c, "seconds": 10.0 * (i + 1),
+            "status": "ok" if c is not None else "error", "error": None} for i, c in enumerate([4, 6, None])]
+    _jl(d / "count_m_R3.jsonl", old)
+    new = [{**r, "raw_response": "", "finish_reason": "stop", "suspicious": r["people_count"] == 0} for r in
+           [{"snapshot_id": "s0", "mode": "frame-list", "model": "m", "people_count": 0, "seconds": 1.0, "status": "ok"},
+            {"snapshot_id": "s1", "mode": "frame-list", "model": "m", "people_count": None, "seconds": 2.0,
+             "status": "truncated"}]]
+    _jl(d / "count_m_R3_rep1.1.jsonl", new)
+    (d / "runs.jsonl").write_text('{"run_id": "x"}\n')
+    (d / "vllm.log").write_text("log")
+
+    out = tmp_path / "s.csv"
+    assert S.main(["--dir", str(d), "--out", str(out)]) == 0
+    rows = {(r["mode"], r["variant"], r["tag"]): r for r in S.collect(d)}
+    assert set(rows) == {("R1", "A", ""), ("R1", "D", ""), ("R3", "A", ""), ("R3", "A", "rep1.1")}  # repeat2 is no row
+    a = rows[("R1", "A", "")]
+    assert a["format"] == "old" and a["rows"] == 4 and a["ok_share"] == 0.75 and a["error_share"] == 0.25
+    assert a["truncated_share"] == 0 and a["sec_mean"] == 2.0 and a["sec_p95"] == 3.0
+    assert a["black_share"] == round(1 / 3, 4) and a["unknown_share"] == round(1 / 3, 4)
+    assert a["repeat_pairs"] == 3 and a["repeat_color_same"] == round(2 / 3, 4) and a["repeat_type_same"] == 1
+    dd = rows[("R1", "D", "")]
+    assert dd["format"] == "new" and dd["truncated_share"] == 0.5 and dd["bad_lines"] == 1 and dd.get("repeat_pairs") is None
+    o = rows[("R3", "A", "")]
+    assert o["format"] == "old" and o["count_mean"] == 5 and o["count_std"] == 1 and o["count_min"] == 4
+    assert o.get("suspicious") is None  # unknown in the old format, not 0
+    n = rows[("R3", "A", "rep1.1")]
+    assert n["suspicious"] == 1 and n["truncated_share"] == 0.5 and n["count_mean"] == 0
+    csv_rows = list(csv.DictReader(out.open()))
+    assert len(csv_rows) == 4 and csv_rows[0]["model"] == "m" and set(S.COLUMNS) == set(csv_rows[0])
+    md = S.to_markdown(S.collect(d))
+    assert "### Одежда (R1)" in md and "### Счёт людей (R2/R3/R4)" in md and "rep1.1" in md
+
+
+def test_summarize_runs_empty_or_missing_dir(tmp_path):
+    from eval import summarize_runs as S
+    assert S.main(["--dir", str(tmp_path / "nope")]) == 2
+    (tmp_path / "e").mkdir()
+    assert S.main(["--dir", str(tmp_path / "e")]) == 1
