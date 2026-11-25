@@ -43,6 +43,17 @@ def _majority(rows, field):
     return c[0][0], False
 
 
+def _expand(paths):
+    """--gold может быть несколькими файлами или маской: eval/gold/gold_frames_*.csv (по файлу на разметчика)."""
+    if isinstance(paths, (str, Path)):
+        paths = [paths]
+    out = []
+    for p in paths:
+        hit = sorted(glob.glob(str(p)))
+        out += hit if hit else [str(p)]
+    return out
+
+
 def _alias(rows, field, alt):
     """Колонка могла называться clothing_color вместо color: копируем значение в field."""
     return [{**r, field: r.get(field) or r.get(alt)} for r in rows]
@@ -50,9 +61,12 @@ def _alias(rows, field, alt):
 
 def load_gold_people(path, skip_visible=("не видно", "not_visible")):
     groups = defaultdict(list)
-    with open(path, newline="", encoding="utf-8") as f:
-        for r in csv.DictReader(f):
-            groups[(r["video_id"], str(r["snapshot_id"]).strip(), int(r["person_idx"]))].append(r)
+    for one in _expand(path):
+        with open(one, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                if not (r.get("color") or r.get("clothing_color")):
+                    continue  # строка ещё не размечена
+                groups[(r["video_id"], str(r["snapshot_id"]).strip(), int(r["person_idx"]))].append(r)
     gold, conflicts = {}, 0
     for k, rs in groups.items():
         vis, _ = _majority(rs, "visible")
@@ -183,10 +197,21 @@ def _count_stats(errs):
 def cmd_count(a):
     """T33. Сравнивает с человеком ДВА числа: сырой people_count детектора (то, что сейчас в базе)
     и число людей после удаления дублей рамок (cv.crop_people)."""
-    gold = defaultdict(list)
-    with open(a.gold, newline="", encoding="utf-8") as f:
-        for r in csv.DictReader(f):
-            gold[(r["video_id"], str(r["snapshot_id"]).strip())].append(int(r["true_people_count"]))
+    gold, labelers = defaultdict(list), defaultdict(int)
+    for one in _expand(a.gold):
+        with open(one, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                if str(r.get("true_people_count", "")).strip() == "":
+                    continue  # ещё не заполнено
+                gold[(r["video_id"], str(r["snapshot_id"]).strip())].append(int(r["true_people_count"]))
+                labelers[r.get("labeler", "?")] += 1
+    if not gold:
+        raise SystemExit("в эталоне нет ни одной заполненной строки true_people_count")
+    print("разметчики: " + ", ".join(f"{k} - {v} кадров" for k, v in labelers.items()))
+    spread = {k: v for k, v in gold.items() if len(set(v)) > 1}
+    if spread:
+        print(f"разметчики разошлись на {len(spread)} из {len(gold)} кадров: " +
+              "; ".join(f"{k[1]}={v}" for k, v in sorted(spread.items())))
     pred = {}
     for pat in a.frames_index:
         for p in glob.glob(pat):
@@ -219,12 +244,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("people")
-    p.add_argument("--gold", required=True)
+    p.add_argument("--gold", required=True, nargs="+")
     p.add_argument("--pred", nargs="+", required=True)
     p.add_argument("--out-md")
     p.add_argument("--out-dir")
     c = sub.add_parser("count")
-    c.add_argument("--gold", required=True)
+    c.add_argument("--gold", required=True, nargs="+")
     c.add_argument("--frames-index", nargs="+", required=True)
     c.add_argument("--out-md")
     a = ap.parse_args()

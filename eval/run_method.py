@@ -34,7 +34,8 @@ def build_describer(a):
     if a.method == "hist":
         from cv.color_hist import HistColorDescriber
         return HistColorDescriber(wb_alpha=a.wb_alpha, use_skin_filter=not a.no_skin,
-                                  dark_sat=a.dark_sat, neutral_black_v=a.neutral_black_v)
+                                  dark_sat=a.dark_sat, neutral_black_v=a.neutral_black_v,
+                                  top_skip=a.top_skip)
     if a.method == "siglip":
         from vlm.describers.siglip import SiglipDescriber
         return SiglipDescriber(model_id=a.siglip_model, device=a.device)
@@ -70,6 +71,8 @@ def main():
     ap.add_argument("--no-skin", action="store_true")
     ap.add_argument("--dark-sat", type=float, default=0.0,
                     help="hist: тёмные пиксели с насыщенностью ниже порога -> black (0 = выключено; пробуй 0.6)")
+    ap.add_argument("--top-skip", type=float, default=0.0,
+                    help="hist: игнорировать верхнюю долю кропа (голова/волосы). В торсе-кропе это ~20-25%%; пробуй 0.25")
     ap.add_argument("--neutral-black-v", type=float, default=0.30,
                     help="hist: серый темнее этой яркости -> black (по умолчанию 0.30; пробуй 0.22)")
     ap.add_argument("--siglip-model", default="google/siglip-base-patch16-224")

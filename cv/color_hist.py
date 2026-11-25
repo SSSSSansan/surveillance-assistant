@@ -92,15 +92,18 @@ class HistColorDescriber(Describer):
     method = "cv:hist"
 
     def __init__(self, wb_alpha=0.5, use_skin_filter=True, k=3, min_pixels=60,
-                 second_share=0.20, max_pixels=4000, seed=0, dark_sat=0.0, neutral_black_v=0.30):
+                 second_share=0.20, max_pixels=4000, seed=0, dark_sat=0.0, neutral_black_v=0.30,
+                 top_skip=0.0):
         self.wb_alpha, self.use_skin_filter, self.k = wb_alpha, use_skin_filter, k
         self.dark_sat, self.neutral_black_v = dark_sat, neutral_black_v
+        self.top_skip = top_skip  # доля кропа сверху, которую игнорируем (голова, волосы, шапка)
         self.min_pixels, self.second_share = min_pixels, second_share
         self.max_pixels, self.seed = max_pixels, seed
 
     def params(self):
         return {"wb_alpha": self.wb_alpha, "skin_filter": self.use_skin_filter, "k": self.k,
-                "dark_sat": self.dark_sat, "neutral_black_v": self.neutral_black_v}
+                "dark_sat": self.dark_sat, "neutral_black_v": self.neutral_black_v,
+                "top_skip": self.top_skip}
 
     def describe(self, img_bgr):
         if img_bgr is None or img_bgr.size == 0:
@@ -108,6 +111,8 @@ class HistColorDescriber(Describer):
         img = gray_world(img_bgr, self.wb_alpha)
         h, w = img.shape[:2]
         mask = center_mask(h, w)
+        if self.top_skip > 0:
+            mask[: int(h * self.top_skip)] = False
         if self.use_skin_filter:
             sk = skin_mask(img)
             # если "кожей" оказалось больше половины - скорее всего это розовая/бежевая

@@ -231,5 +231,28 @@ ok_sheet = contact_sheet(items_, paths_, sheet_dir / "sheet.jpg", per_row=3)
 im_ = cv2.imread(str(sheet_dir / "sheet.jpg"))
 check("контактный лист: 7 кропов по 3 в ряд собираются в одну картинку", ok_sheet and im_ is not None and im_.shape[0] > 3 * 200)
 
+# ------------------------------------------------- top_skip и разметка нескольких людей
+
+hd = np.full((120, 80, 3), (90, 140, 90), np.uint8)
+hd[0:30, 20:60] = (25, 25, 30)
+hd[30:120, 12:68] = (170, 200, 220)
+c0 = HistColorDescriber(wb_alpha=0, top_skip=0.0).describe(hd)
+c1 = HistColorDescriber(wb_alpha=0, top_skip=0.25).describe(hd)
+check("M1 top_skip: голова не мешает, уверенность растёт", c0["color"] == c1["color"] == "beige"
+      and c1["confidence"] > c0["confidence"], f"{c0['confidence']} -> {c1['confidence']}")
+
+g_dir = Path(tempfile.mkdtemp())
+(g_dir / "gold_frames_aray.csv").write_text(
+    "video_id,snapshot_id,true_people_count,labeler\nv,sn_0000,3,Aray\nv,sn_0001,,Aray\n", encoding="utf-8")
+(g_dir / "gold_frames_saniya.csv").write_text(
+    "video_id,snapshot_id,true_people_count,labeler\nv,sn_0000,4,Saniya\nv,sn_0001,,Saniya\n", encoding="utf-8")
+fx = g_dir / "fi.json"
+fx.write_text(json.dumps([{"video_id": "v", "snapshot_id": "sn_0000", "people_count": 4, "people_after_dedup": 4},
+                          {"video_id": "v", "snapshot_id": "sn_0001", "people_count": 9, "people_after_dedup": 9}]))
+r = run("eval.score_methods", "count", "--gold", str(g_dir / "gold_frames_*.csv"), "--frames-index", str(fx))
+check("T33: маска gold_frames_*.csv, пустые строки пропущены, расхождение разметчиков показано",
+      r.returncode == 0 and "Aray - 1 кадров" in r.stdout and "Saniya - 1 кадров" in r.stdout
+      and "разошлись на 1 из 1" in r.stdout and "кадров: 1" in r.stdout, r.stdout[-500:] + r.stderr[-300:])
+
 print(f"\nИТОГО: провалено {len(FAILS)}")
 sys.exit(1 if FAILS else 0)
