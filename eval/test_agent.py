@@ -111,7 +111,7 @@ check("системный промпт: функции, «не нашёл», «�
       all(x in hist[0]["content"] for x in ("count_events", "не нашёл", "ответить нельзя: в базе нет этих данных")))
 
 c = Scripted(call("query_events", {"event_type": "pick_up"}), ans("Да"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 tool_msg = json.loads(c.seen[1][3]["content"])
 check("аргументы-словарь (не строка) принимаются", r.answer == "Да" and r.steps[0].arguments == {"event_type": "pick_up"})
 check("модель видит событие без служебных полей",
@@ -122,30 +122,30 @@ m = {"role": "assistant", "content": "", "tool_calls": [
     {"id": "a", "type": "function", "function": {"name": "count_events", "arguments": '{"event_type": "enter"}'}},
     {"id": "b", "type": "function", "function": {"name": "count_events", "arguments": '{"event_type": "exit"}'}}]}
 c = Scripted(m, ans("4 и 3"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 check("несколько вызовов в одном сообщении: оба выполнены, tool-сообщения с их id",
       len(r.steps) == 2 and [x["tool_call_id"] for x in c.seen[1][3:]] == ["a", "b"]
       and [s.result["count"] for s in r.steps] == [4, 3])
 
 c = Scripted(call("count_events", "{не json"), ans("не получилось"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 check("битый JSON аргументов: ошибка возвращена модели, цикл продолжается",
       r.answer == "не получилось" and json.loads(c.seen[1][3]["content"])["ok"] is False and r.error is None)
 
 c = Scripted(call("rm_rf", "{}"), ans("ок"))
-r = runner.run_agent("q", c, conn)
+r = runner.run_agent("вопрос", c, conn)
 check("неизвестная функция от модели: ошибка модели, цикл продолжается",
       r.answer == "ок" and "неизвестная функция" in json.loads(c.seen[1][3]["content"])["error"])
 
 c = Scripted(*[call("count_events", "{}", f"c{i}") for i in range(10)])
-r = runner.run_agent("q", c, conn, max_steps=3)
+r = runner.run_agent("вопрос", c, conn, max_steps=3)
 check("лимит шагов: ошибка, не зависание", r.error and "3 шагов" in r.error and r.answer is None and len(r.steps) == 3, r.error)
 
-r = runner.run_agent("q", Scripted(LLMError("модель недоступна")), conn)
+r = runner.run_agent("вопрос", Scripted(LLMError("модель недоступна")), conn)
 check("ошибка модели -> result.error, без исключения", r.error == "модель недоступна" and r.answer is None)
-r = runner.run_agent("q", Scripted(ans("   ")), conn)
+r = runner.run_agent("вопрос", Scripted(ans("   ")), conn)
 check("пустой ответ модели -> ошибка", r.error and "пуст" in r.error)
-r = runner.run_agent("q", Scripted(ans("<think>рассуждаю...</think>Да")), conn)
+r = runner.run_agent("вопрос", Scripted(ans("<think>рассуждаю...</think>Да")), conn)
 check("блок <think> вырезается из ответа", r.answer == "Да", r.answer)
 check("strip_think: незакрытое начало", runner.strip_think("рассуждение</think>Ответ") == "Ответ")
 
@@ -192,7 +192,7 @@ try:
     check("без модели -> LLMError", False)
 except LLMError as e:
     check("без модели -> LLMError", "model" in str(e))
-r = runner.run_agent("q", OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3), conn)
+r = runner.run_agent("вопрос", OpenAICompatClient(base_url=f"http://127.0.0.1:{free_port}/v1", model="m", timeout=3), conn)
 check("недоступная модель через run_agent -> result.error", r.error and "connect" in r.error)
 
 # ---------- грейдер ----------

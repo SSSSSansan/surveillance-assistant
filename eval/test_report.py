@@ -193,7 +193,7 @@ with mock.patch.object(st_, "list_snapshot_videos", return_value=[]):
 with mock.patch.object(st_, "list_snapshot_videos", side_effect=RuntimeError("нет базы")):
     st = make_st(); run_page(st)
     check("страница: база недоступна -> понятная ошибка", st.error.called and "нет базы" in str(st.error.call_args))
-check("меню: Report между Archive и Assistant", [k for k, _, _ in ui_theme.NAV] == ["archive", "report", "assistant"])
+    check("меню: Report между Archive и Assistant", [k for k, _, _ in ui_theme.NAV] == ["archive", "report", "labeling", "assistant"])
 
 print(f"\nИТОГО провалов: {FAILS}")
 sys.exit(1 if FAILS else 0)

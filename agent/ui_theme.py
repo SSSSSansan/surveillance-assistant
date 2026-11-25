@@ -19,6 +19,7 @@ PG = "PostgreSQL (DATABASE_URL)"
 # (key, label, page path relative to agent/app.py)
 NAV = [("archive", "Archive", "pages/1_Archive.py"),
        ("report", "Report", "pages/2_Report.py"),
+       ("labeling", "Labeling", "pages/3_Labeling.py"),
        ("assistant", "Assistant", "app.py")]
 
 PALETTES = {

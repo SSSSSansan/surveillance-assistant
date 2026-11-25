@@ -18,6 +18,8 @@ STEPS = [
     "eval.test_t10_tools",
     "eval.test_agent",
     "eval.test_snapshots",
+    "eval.test_gold",
+     "eval.test_labeling",
     "eval.test_design",
     "eval.test_report",
 ]
