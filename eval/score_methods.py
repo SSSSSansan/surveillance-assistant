@@ -217,7 +217,19 @@ def cmd_count(a):
         for p in glob.glob(pat):
             for fr in json.loads(Path(p).read_text(encoding="utf-8")):
                 pred[(fr["video_id"], fr["snapshot_id"])] = (fr["people_count"], fr["people_after_dedup"])
+    vlm, vlm_skipped = {}, {}
+    for pat in a.vlm_counts:
+        for pth in sorted(glob.glob(pat)):
+            name, used, skipped = Path(pth).stem, {}, 0
+            for line in open(pth, encoding="utf-8"):
+                r = json.loads(line)
+                if r.get("status") != "ok" or r.get("suspicious") or r.get("people_count") is None:
+                    skipped += 1
+                    continue
+                used[(r["video_id"], r["snapshot_id"])] = int(r["people_count"])
+            vlm[name], vlm_skipped[name] = used, skipped
     raw_e, dd_e, rows = [], [], []
+    vlm_e = {n: [] for n in vlm}
     for k, counts in sorted(gold.items()):
         if k not in pred:
             continue
@@ -225,15 +237,29 @@ def cmd_count(a):
         raw, dd = pred[k]
         raw_e.append(raw - truth)
         dd_e.append(dd - truth)
-        rows.append((k, truth, raw, dd))
+        extra = {}
+        for n, used in vlm.items():
+            if k in used:
+                vlm_e[n].append(used[k] - truth)
+                extra[n] = used[k] - truth, used[k]
+        rows.append((k, truth, raw, dd, extra))
     if not raw_e:
         raise SystemExit("нет общих кадров между эталоном и frames_index.json (проверь video_id и sn_XXXX)")
-    md = ["## Счёт людей: детектор против человека", "", f"кадров: {len(raw_e)}", "",
-          "**Сырой people_count (как сейчас в базе):** " + _count_stats(raw_e), "",
-          "**После удаления дублей рамок:** " + _count_stats(dd_e), "",
-          "минус = детектор теряет людей, плюс = лишние рамки", "",
-          "| видео | срез | эталон | сырой | без дублей |", "|---|---|---|---|---|"]
-    md += [f"| {k[0]} | {k[1]} | {t} | {r:d} ({r - t:+d}) | {d:d} ({d - t:+d}) |" for k, t, r, d in rows]
+    md = ["## Счёт людей: детектор и VLM против человека", "", f"кадров с эталоном: {len(raw_e)}", "",
+          "**YOLO, сырой people_count (как сейчас в базе):** " + _count_stats(raw_e), "",
+          "**YOLO после удаления дублей рамок:** " + _count_stats(dd_e), ""]
+    for n, errs in vlm_e.items():
+        if errs:
+            md += [f"**{n}** (кадров {len(errs)}, не учтено из-за status/suspicious: {vlm_skipped[n]}): "
+                   + _count_stats(errs), ""]
+        else:
+            md += [f"**{n}**: нет ни одного годного кадра (не учтено {vlm_skipped[n]})", ""]
+    md += ["минус = теряет людей, плюс = лишние", ""]
+    head = "| видео | срез | эталон | YOLO сырой | YOLO без дублей |" + "".join(f" {n} |" for n in vlm)
+    md += [head, "|" + "---|" * (5 + len(vlm))]
+    for k, t, r, d, extra in rows:
+        cells = "".join(f" {extra[n][1]} ({extra[n][0]:+d}) |" if n in extra else " - |" for n in vlm)
+        md.append(f"| {k[0]} | {k[1]} | {t} | {r:d} ({r - t:+d}) | {d:d} ({d - t:+d}) |{cells}")
     out = "\n".join(md)
     print(out)
     if a.out_md:
@@ -251,6 +277,8 @@ def main():
     c = sub.add_parser("count")
     c.add_argument("--gold", required=True, nargs="+")
     c.add_argument("--frames-index", nargs="+", required=True)
+    c.add_argument("--vlm-counts", nargs="*", default=[],
+                   help="count_*.jsonl от VLM (R2/R3/R4); строки со status!=ok или suspicious=true не учитываются")
     c.add_argument("--out-md")
     a = ap.parse_args()
     {"people": cmd_people, "count": cmd_count}[a.cmd](a)
