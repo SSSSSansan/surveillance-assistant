@@ -27,6 +27,7 @@
   (`--disable-thinking`). `max_tokens` и штрафы не задавались, кроме прогонов `R3_rep1.1` (`--repetition-penalty 1.1`).
 - **Журнал прогонов.** В `runs.jsonl` по строке на видео, поэтому каждый прогон записан дважды. Это не дубль.
   - V2 R4 запускался два раза. Первый прогон (10:13, 0.68 с) упал: `Connection refused`, error на всех 22 кадрах.
+    Причина: обрыв ssh, после которого сервер V2 перезапускали (см. раздел 3).
   - Файл `count_qwen3-vl-8b-awq_R4.jsonl` перезаписан вторым прогоном (11:07), в нём 22 из 22 ok.
   - `summarize_runs` берёт для каждого файла последний прогон по `started_at`, а старый выводит в stderr как «не учтён».
 
@@ -41,23 +42,31 @@
 Все чекпоинты 4-битные. bf16 на общей карте не помещается. Это измерено на V1: на старт нужно около 11.5 GiB, а доступно 11.38 GiB.
 В логах vLLM у всех четырёх стоит `quantization=compressed-tensors`: в этом формате vLLM загружает и AWQ-, и GPTQ-веса.
 
-## 3. Память
-| слот | веса, GiB | KV-кэш, GiB | пик активаций, GiB | VRAM при работе, GiB | бюджет `--gpu-memory-utilization` | другие ограничения |
+## 3. Конфиги vLLM и память на этом наборе
+Источник: команды запуска и логи `server_runs2/vllm_*.log` (строка `non-default args`). Для V1 лога в `server_runs2/` нет,
+его настройки взяты из команды запуска.
+
+| слот | `--gpu-memory-utilization` | `--max-model-len` | `--max-num-batched-tokens` | `--max-num-seqs` | размер картинки | прочее |
 |---|---|---|---|---|---|---|
-| V1 | 4.26 | 4.42 | — | 9.3–9.7 | 0.48 | `max-num-seqs 8`, `max-num-batched-tokens 4096` |
-| V2 | 7.27 | 3.45 | 0.31 | 10.4 | 0.50 | картинка до 2.36 млн пикселей, `max-num-seqs 4`, `max-num-batched-tokens 2048` |
-| V3 | 3.83 | 6.79 | 0.34 | ≈10.2 | 0.50 | как у V2: картинка до 2.36 млн пикселей, `max-num-seqs 4`, `max-num-batched-tokens 2048` |
-| V4 | 4.18 | 6.33 | 0.42 | ≈10.2 | 0.50 | `max-num-seqs 4`, `max-num-batched-tokens 2048` |
+| V1 | 0.48 | 8192 | 8192 | 8 | без ограничения | `--enforce-eager`, `--limit-mm-per-prompt '{"image": 1}'` |
+| V2 | 0.50 | 4096 | 2048 | 4 | `--mm-processor-kwargs` size: shortest_edge 65536, longest_edge 2359296 (до 2.36 млн пикселей) | `--enforce-eager`, `--limit-mm-per-prompt '{"image": 1}'` |
+| V3 | 0.50 | 4096 | 2048 | 4 | как у V2 | как у V2; запросы с `--disable-thinking` |
+| V4 | 0.48 | 4096 | 4096 (значение по умолчанию скрипта) | 4 | без ограничения (Gemma сама сжимает кадр до 896×896) | `--enforce-eager`, `--limit-mm-per-prompt '{"image": 1}'` |
 
-> KV-кэш и VRAM зависят от выставленного бюджета: vLLM занимает под KV всё, что остаётся в бюджете после весов и
-> активаций. Это **не минимально необходимая** память. У V1 пик активаций не записан.
+**Перезапуск V2.** V2 перезапускали один раз: после обрыва ssh первый прогон R4 получил `Connection refused`.
+- `count_qwen3-vl-8b-awq_R4.jsonl` и `count_qwen3-vl-8b-awq_R3_rep1.1.jsonl` записаны с повторного запуска.
+- Все остальные файлы V2 (R1 A/A_repeat2/B/D, R2, R3) записаны с первого запуска.
+- В `server_runs2/` лежит только лог повторного запуска (`vllm_v2_restart.log`), поэтому память V2 ниже взята из него.
 
-> Таблица снята с прогонов этапа 3 (24–25.11.2026).
-> В логах `server_runs2/vllm_*.log` (V2, V3, V4) веса и KV-кэш те же, кроме двух мест:
-> - **V3:** пик активаций 0.49 GiB.
-> - **V4:** запущен с `--gpu-memory-utilization 0.48` и `--max-num-batched-tokens 4096`. KV-кэш 5.88 GiB, пик активаций 0.53 GiB.
->
-> Лога vLLM для V1 в `server_runs2/` нет, поэтому его настройки на этом наборе **НЕ ПРОВЕРЕНЫ**.
+| слот | веса, GiB («Model loading took») | KV-кэш, GiB («Available KV cache memory») | пик активаций, GiB | VRAM на GPU 1 без соседа |
+|---|---|---|---|---|
+| V1 | 4.26 | 4.42 | — | 9.3–9.7 GiB |
+| V2 | 7.2 | 3.45 | 0.31 | ≈10056 MiB (nvidia-smi: 20997 − 10941) |
+| V3 | 3.83 | 6.79 | 0.49 | не измерено |
+| V4 | 4.18 | 5.88 | 0.53 | не измерено |
+
+- **V1:** не измерено в этом прогоне, это значения этапа 2. Тогда V1 запускался с другими лимитами (`max-num-batched-tokens 4096`), поэтому к этому набору цифры относятся лишь приблизительно.
+- KV-кэш зависит от выставленного бюджета: vLLM занимает под KV всё, что остаётся в бюджете после весов и активаций. Это **не минимально необходимая** память.
 
 ## 4. Скорость и стабильность (без эталона)
 Секунды считаются на один запрос при 2 параллельных запросах на общей карте. Доли ok / truncated / ошибка в сумме
@@ -105,7 +114,9 @@
 | V4 | R3 | rep1.1 | 22/22 | 0 | 0 | 0 | 27.9 | 36.0 | 8.5 (5–11) |
 | V4 | R4 | — | 22/22 | 0 | 0 | 0 | 31.8 | 38.1 | 11.8 (9–14) |
 
-- «Штраф rep1.1» — это прогон с `--repetition-penalty 1.1`. У V1 его нет, так задумано.
+- «Штраф rep1.1» — это прогон с `--repetition-penalty 1.1`.
+- R3 со штрафом 1.1 у qwen3-vl-4b-awq (V1) не считали: у всех трёх остальных моделей штраф занижает счёт (см. 5.3).
+  Сравнение R3 и R3_rep1.1 делаем по трём моделям: V2, V3, V4.
 - **V1 R4, suspicious 4.** На кадрах video1 `sn_0006` и video2 `sn_0003`, `sn_0009`, `sn_0010` модель ответила
   `{"people_count": 0, "people": []}` со статусом ok, хотя рамок детектора на них 11–14. Отсюда минимум 0.
   В метриках раздела 5 эти кадры не учитываются.
@@ -163,6 +174,8 @@
 - Колонка «вместе» совпадает с выводом `eval.score_methods count` (`count_vs_gold.md`).
 
 ### 5.3. R3: штраф за повторы против прогона без штрафа
+Только V2, V3 и V4: у V1 (qwen3-vl-4b-awq) R3 со штрафом не запускали (см. 4.2).
+
 | слот | ok без штрафа | ok с rep1.1 | кадров ok в обоих | сдвиг счёта (rep1.1 − без), на общих кадрах |
 |---|---|---|---|---|
 | V2 | 7/22 | 22/22 | 7 | −1.86 |
@@ -204,7 +217,7 @@ python3 -m eval.score_methods people --gold eval/gold/gold_people*.csv --pred "s
 - **(д)** Счёт людей: 22 кадра, два разметчика разошлись на 11 из 22 (см. 5.1 и 5.4).
 - **(е)** R4 даёт модели только рамки `kept=true` от Арай. Ошибки детектора и дедупликации переходят в подсказку.
 - **(ж)** Какой чекпоинт использовался на этапе 2, не установлено.
-- **(з)** Настройки vLLM для V1 на этом наборе не подтверждены логом (см. раздел 3).
+- **(з)** Для V1 на этом наборе нет лога vLLM: настройки взяты из команды запуска, память — значения этапа 2 (см. раздел 3).
 
 Общие ограничения методики (из плана этапа):
 - Эталон будет малым (одна школьная камера MEVA), поэтому выводы не переносятся на другие сцены.
@@ -224,12 +237,12 @@ source ~/work/venv/bin/activate && cd ~/work
 export CUDA_VISIBLE_DEVICES=1 HF_HOME=~/work/hf_cache XDG_CACHE_HOME=~/work/cache VLLM_USE_FLASHINFER_SAMPLER=0
 ```
 
-**Сервер vLLM.** Команды собраны из строки `non-default args` в логах прогонов (`server_runs/vllm_v*.log`; для V2–V4 сверены с `server_runs2/vllm_*.log`).
+**Сервер vLLM.** Команды V2–V4 собраны из строки `non-default args` в логах `server_runs2/vllm_*.log`, V1 — из команды запуска (лога нет).
 Модели поднимаются строго по одной, перед каждой нужно проверить место (`bash vlm/server/check_gpu.sh`).
 
-V1:
+V1 (лога нет, команда запуска на этом наборе):
 ```bash
-vllm serve cpatonn/Qwen3-VL-4B-Instruct-AWQ-4bit --served-model-name qwen3-vl-4b-awq --port 8765 --max-model-len 4096 --gpu-memory-utilization 0.48 --limit-mm-per-prompt '{"image": 1}' --max-num-seqs 8 --max-num-batched-tokens 4096 --enforce-eager
+vllm serve cpatonn/Qwen3-VL-4B-Instruct-AWQ-4bit --served-model-name qwen3-vl-4b-awq --port 8765 --max-model-len 8192 --gpu-memory-utilization 0.48 --limit-mm-per-prompt '{"image": 1}' --max-num-seqs 8 --max-num-batched-tokens 8192 --enforce-eager
 ```
 V2:
 ```bash
@@ -239,9 +252,9 @@ V3:
 ```bash
 vllm serve cyankiwi/Qwen3.5-4B-AWQ-4bit --served-model-name qwen3.5-4b-awq --port 8765 --max-model-len 4096 --gpu-memory-utilization 0.50 --limit-mm-per-prompt '{"image": 1}' --mm-processor-kwargs '{"size": {"shortest_edge": 65536, "longest_edge": 2359296}}' --max-num-seqs 4 --max-num-batched-tokens 2048 --enforce-eager
 ```
-V4 (на наборе `server_runs2` по логу запущен с `--gpu-memory-utilization 0.48 --max-num-batched-tokens 4096`, ниже исходная команда этапа 3):
+V4:
 ```bash
-vllm serve RedHatAI/gemma-3-4b-it-quantized.w4a16 --served-model-name gemma3-4b-w4a16 --port 8765 --max-model-len 4096 --gpu-memory-utilization 0.50 --limit-mm-per-prompt '{"image": 1}' --max-num-seqs 4 --max-num-batched-tokens 2048 --enforce-eager
+vllm serve RedHatAI/gemma-3-4b-it-quantized.w4a16 --served-model-name gemma3-4b-w4a16 --port 8765 --max-model-len 4096 --gpu-memory-utilization 0.48 --limit-mm-per-prompt '{"image": 1}' --max-num-seqs 4 --max-num-batched-tokens 4096 --enforce-eager
 ```
 
 **Раннер** (во втором окне, когда сервер готов). Набор Арай лежит на сервере в `~/work/data/crops2/video{1,2}/`, кадры
