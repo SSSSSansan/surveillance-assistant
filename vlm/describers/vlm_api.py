@@ -13,6 +13,12 @@ for the frame size in R4, optional).
 NOT VERIFIED without the GPU server: `disable_thinking` (chat_template_kwargs.enable_thinking=false)
 is accepted by the vLLM build in use; images as base64 data URLs for every model; few-shot (several
 images in one request) needs a --limit-mm-per-prompt larger than 1 on the server.
+
+Every result carries raw_response (model text before <think> stripping), prompt_tokens, completion_tokens and
+finish_reason. finish_reason == "length" (cut at max_tokens) -> status "truncated", value None: a cut JSON is
+never repaired and a cut people list is never counted.
+Optional sampling (off by default, so old runs stay reproducible): frequency_penalty, repetition_penalty
+(vLLM accepts both in the request body) and max_tokens (replaces the per-mode limit in EVERY request).
 """
 import base64
 import json
@@ -152,7 +158,8 @@ def parse_boxes(text: str, n_boxes: int):
 class VlmApiDescriber(BaseDescriber):
     def __init__(self, model: str = ds.MODEL, api_url: str = ds.API_URL, mode: str = "R1",
                  prompt_variant: str = "A", disable_thinking: bool = False, timeout: int = ds.TIMEOUT_SEC,
-                 retries: int = 1, fewshot_path=None, method_name: str = None):
+                 retries: int = 1, fewshot_path=None, method_name: str = None, frequency_penalty: float = None,
+                 repetition_penalty: float = None, max_tokens: int = None):
         mode = prompts.MODE_CODES.get(mode, mode)
         if mode not in prompts.MODES:
             raise ValueError(f"unknown mode {mode!r}; use R1..R4 or one of {prompts.MODES}")
@@ -163,20 +170,31 @@ class VlmApiDescriber(BaseDescriber):
         self.model, self.api_url, self.mode = model, api_url, mode
         self.prompt_variant, self.disable_thinking = prompt_variant, disable_thinking
         self.timeout, self.retries = timeout, retries
+        # None = not sent at all (the request stays exactly as before)
+        self.extra = {k: v for k, v in (("frequency_penalty", frequency_penalty),
+                                        ("repetition_penalty", repetition_penalty)) if v is not None}
+        self.max_tokens = max_tokens
         self.method = method_name or f"vlm:{model}"
         self._fewshot = prompts.load_fewshot(fewshot_path) if (mode == "crop" and prompt_variant == "C") else None
 
     # ---- transport
     def _chat(self, messages: list, max_tokens: int) -> tuple:
-        payload = {"model": self.model, "temperature": 0, "max_tokens": max_tokens, "messages": messages}
+        """-> (text without <think>, meta{prompt_tokens, completion_tokens, finish_reason, raw})"""
+        payload = {"model": self.model, "temperature": 0,
+                   "max_tokens": self.max_tokens if self.max_tokens is not None else max_tokens, "messages": messages}
+        payload.update(self.extra)
         if self.disable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": False}  # NOT VERIFIED on the server
         req = urllib.request.Request(self.api_url, data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             result = json.loads(resp.read())
-        text = result["choices"][0]["message"]["content"] or ""
-        return strip_thinking(text), result.get("usage", {}) or {}
+        choice = result["choices"][0]
+        text = choice["message"]["content"] or ""
+        usage = result.get("usage", {}) or {}
+        return strip_thinking(text), {"prompt_tokens": usage.get("prompt_tokens"),
+                                      "completion_tokens": usage.get("completion_tokens"),
+                                      "finish_reason": choice.get("finish_reason"), "raw": text}
 
     @staticmethod
     def _user(text: str, image_url: str = None) -> dict:
@@ -187,22 +205,29 @@ class VlmApiDescriber(BaseDescriber):
         return {"role": "user", "content": content}
 
     def _run(self, pipeline, parser, label: str) -> dict:
-        """pipeline() -> (text_to_parse, raw_log, usage_dict) (may do several requests).
-        parser(text) -> (value|None, warnings). Whole pipeline is retried `retries` times."""
+        """pipeline() -> (text_to_parse, meta) (may do several requests; meta as from _chat).
+        parser(text) -> (value|None, warnings). Whole pipeline is retried `retries` times on errors;
+        a truncated answer is NOT retried (temperature 0 gives the same answer again)."""
         out = {"status": "error", "value": None, "warnings": [], "raw_response": "", "error": None,
-               "attempts": 0, "prompt_tokens": None, "completion_tokens": None, "seconds": 0.0}
+               "attempts": 0, "prompt_tokens": None, "completion_tokens": None, "finish_reason": None,
+               "seconds": 0.0}
         t0 = time.perf_counter()
         for attempt in range(1 + self.retries):
             out["attempts"] = attempt + 1
             try:
-                text, raw, usage = pipeline()
+                text, meta = pipeline()
             except Exception as e:  # network, HTTP error, bad server JSON, timeout
                 out["error"] = f"request failed: {type(e).__name__}: {e}"
                 print(f"  {label}[attempt {attempt + 1}] {out['error']}", file=sys.stderr)
                 continue
-            out["raw_response"] = raw
-            out["prompt_tokens"] = usage.get("prompt_tokens")
-            out["completion_tokens"] = usage.get("completion_tokens")
+            raw = meta["raw"]
+            out.update(raw_response=raw, prompt_tokens=meta["prompt_tokens"],
+                       completion_tokens=meta["completion_tokens"], finish_reason=meta["finish_reason"])
+            if meta["finish_reason"] == "length":
+                out.update(status="truncated", value=None, warnings=[],
+                           error="answer cut at max_tokens (finish_reason=length); not parsed")
+                print(f"  {label}[attempt {attempt + 1}] {out['error']}", file=sys.stderr)
+                break
             value, warnings = parser(text)
             if value is None:
                 out["error"] = f"cannot parse model answer: {'; '.join(warnings)}"
@@ -214,8 +239,12 @@ class VlmApiDescriber(BaseDescriber):
         return out
 
     @staticmethod
-    def _add(u1: dict, u2: dict) -> dict:
-        return {k: (u1.get(k) or 0) + (u2.get(k) or 0) for k in ("prompt_tokens", "completion_tokens")}
+    def _join(m1: dict, m2: dict) -> dict:
+        """Two requests (variant B) -> one meta: tokens summed, "length" if either step was cut."""
+        out = {k: (m1.get(k) or 0) + (m2.get(k) or 0) for k in ("prompt_tokens", "completion_tokens")}
+        out["finish_reason"] = "length" if "length" in (m1["finish_reason"], m2["finish_reason"]) else m2["finish_reason"]
+        out["raw"] = f"STEP1: {m1['raw']}\nSTEP2: {m2['raw']}"
+        return out
 
     # ---- R1
     def describe_crop(self, crop_data_url: str, person_idx: int = 0, label: str = "") -> dict:
@@ -225,10 +254,12 @@ class VlmApiDescriber(BaseDescriber):
 
         if v == "B":
             def pipeline():
-                t1, u1 = self._chat([self._user(prompts.PROMPT_B_STEP1, crop_data_url)], MAX_TOKENS_STEP1)
-                t2, u2 = self._chat([self._user(prompts.PROMPT_B_STEP2.replace("{description}", t1.strip()))],
+                t1, m1 = self._chat([self._user(prompts.PROMPT_B_STEP1, crop_data_url)], MAX_TOKENS_STEP1)
+                if m1["finish_reason"] == "length":  # cut description: do not feed it to step 2
+                    return t1, {**m1, "raw": f"STEP1: {m1['raw']}"}
+                t2, m2 = self._chat([self._user(prompts.PROMPT_B_STEP2.replace("{description}", t1.strip()))],
                                     MAX_TOKENS_CROP)
-                return t2, f"STEP1: {t1}\nSTEP2: {t2}", self._add(u1, u2)
+                return t2, self._join(m1, m2)
             parser = lambda t: ds.parse_person(t, person_idx)
         else:
             if v == "C":
@@ -241,8 +272,7 @@ class VlmApiDescriber(BaseDescriber):
                 msgs = [self._user(prompts.PROMPT_D if v == "D" else prompts.PROMPT_A, crop_data_url)]
 
             def pipeline():
-                t, u = self._chat(msgs, MAX_TOKENS_CROP)
-                return t, t, u
+                return self._chat(msgs, MAX_TOKENS_CROP)
             parser = (lambda t: parse_crop_d(t, person_idx)) if v == "D" else (lambda t: ds.parse_person(t, person_idx))
 
         r = self._run(pipeline, parser, label)
@@ -260,7 +290,7 @@ class VlmApiDescriber(BaseDescriber):
         except OSError as e:
             return {"status": "error", "mode": self.mode, "people_count": None, "records": [], "warnings": [],
                     "raw_response": "", "error": f"cannot read frame: {e}", "attempts": 0,
-                    "prompt_tokens": None, "completion_tokens": None, "seconds": 0.0}
+                    "prompt_tokens": None, "completion_tokens": None, "finish_reason": None, "seconds": 0.0}
 
         if self.mode == "boxes":
             boxes = list(boxes or [])
@@ -278,8 +308,7 @@ class VlmApiDescriber(BaseDescriber):
             prompt, max_tokens, parser = prompts.PROMPT_R2, MAX_TOKENS_COUNT, parse_count
 
         def pipeline():
-            t, u = self._chat([self._user(prompt, url)], max_tokens)
-            return t, t, u
+            return self._chat([self._user(prompt, url)], max_tokens)
 
         r = self._run(pipeline, parser, f"{frame_path} ")
         res = self._result(r)
@@ -311,4 +340,4 @@ class VlmApiDescriber(BaseDescriber):
         return {"status": r["status"], "record": record, "warnings": r["warnings"],
                 "raw_response": r["raw_response"], "error": r["error"], "attempts": r["attempts"],
                 "prompt_tokens": r["prompt_tokens"], "completion_tokens": r["completion_tokens"],
-                "seconds": r["seconds"]}
+                "finish_reason": r["finish_reason"], "seconds": r["seconds"]}

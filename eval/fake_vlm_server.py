@@ -4,7 +4,9 @@
         url = srv.url            # http://127.0.0.1:PORT/v1/chat/completions
         srv.requests             # list of received JSON payloads
 
-The handler gets the request payload and returns the answer text (or raises / returns None for HTTP 500).
+The handler gets the request payload and returns the answer text (finish_reason "stop"), or a dict
+{"content": text, "finish_reason": "length"} to imitate an answer cut at max_tokens, or raises / returns None
+for HTTP 500. A zero count is just the text '{"people_count": 0}'.
 It is a stand-in for the real vLLM: it proves our code builds requests and parses answers,
 NOT that a real model answers well.
 """
@@ -30,7 +32,10 @@ class FakeVlmServer:
                     self.send_response(500)
                     self.end_headers()
                     return
-                body = json.dumps({"choices": [{"message": {"content": text}}],
+                finish = "stop"
+                if isinstance(text, dict):
+                    text, finish = text["content"], text.get("finish_reason", "stop")
+                body = json.dumps({"choices": [{"message": {"content": text}, "finish_reason": finish}],
                                    "usage": {"prompt_tokens": 100, "completion_tokens": 10}}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

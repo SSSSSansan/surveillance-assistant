@@ -338,6 +338,17 @@ def test_cleanup_deletes_only_the_named_model_everywhere(tmp_path):
     assert r.returncode == 0 and not any(d.exists() for d in mine) and all(d.exists() for d in keep)
 
 
+def test_cleanup_also_removes_flashinfer_cache_outside_work(tmp_path):
+    _fake_home(tmp_path)
+    fi = tmp_path / ".cache/flashinfer"
+    fi.mkdir(parents=True)
+    (fi / "x.so").write_text("x")
+    (tmp_path / ".cache/other").mkdir()
+    assert _cleanup(tmp_path, "no\n").returncode != 0 and fi.exists()
+    assert _cleanup(tmp_path, "yes\n").returncode == 0
+    assert not fi.exists() and (tmp_path / ".cache/other").exists()
+
+
 def test_cleanup_rejects_bad_repo_name(tmp_path):
     mine, _ = _fake_home(tmp_path)
     assert _cleanup(tmp_path, "yes\n", "../../etc").returncode == 2 and all(d.exists() for d in mine)
@@ -369,9 +380,16 @@ def _serve(*args, env=None):
 def test_serve_print_defaults_gpu1_caches_and_util():
     r = _serve("--print")
     out = r.stdout
-    assert r.returncode == 0 and "--gpu-memory-utilization 0.40" in out and "--port 8765" in out and "GPU=1" in out
+    assert r.returncode == 0 and "--gpu-memory-utilization 0.48" in out and "--port 8765" in out and "GPU=1" in out
     assert "HF_HOME=/h/work/hf_cache" in out and "XDG_CACHE_HOME=/h/work/cache" in out
     assert "TRITON_CACHE_DIR=/h/work/cache/triton/" in out and "VLLM_CACHE_ROOT=/h/work/cache/vllm/" in out
+    assert '--limit-mm-per-prompt {"image": 1}' in out  # vLLM 0.34 takes JSON, not image=N (checked on the server)
+    assert '{"image": 4}' in _serve("--print", env={"LIMIT_IMAGES": "4"}).stdout
+    assert "--enforce-eager" in out and "--max-num-seqs 8" in out and "--max-num-batched-tokens 8192" in out
+    assert "VLLM_USE_FLASHINFER_SAMPLER=0" in out and "--max-num-batched-tokens 4096" in _serve("--print", env={"MAX_LEN": "4096"}).stdout
+    assert "--enforce-eager" not in _serve("--print", env={"ENFORCE_EAGER": "0"}).stdout
+    sw = _serve("--print", env={"VLM_REPO": "me/awq-4b", "VLM_SERVED": "qwen3-vl-4b"}).stdout
+    assert "vllm serve me/awq-4b --served-model-name qwen3-vl-4b" in sw and "triton/models--me--awq-4b" in sw
     assert "--gpu-memory-utilization 0.35" in _serve("--print", "--gpu-memory-utilization", "0.35").stdout
     assert _serve("--print", "--gpu-memory-utilization", "1.5").returncode == 2
 
@@ -445,6 +463,106 @@ def test_server_runner_marks_failures_and_missing_frames(tmp_path):
                            capture_output=True, text=True)
     rows = [json.loads(x) for x in (tmp_path / "o/p.jsonl").read_text().splitlines()]
     assert r.returncode == 0 and len(rows) == 2 and all(x["record"] is None and "frame not found" in x["error"] for x in rows)
+
+
+# ------------------------------- raw answer, truncated, suspicious, penalties ---
+LOOP = '{"people":[' + ',\n'.join(['{"clothing_color":"black","clothing_type":"jacket","description":"same man"}'] * 200)
+
+
+def test_describer_truncated_answer_is_not_parsed_or_retried():
+    frame = next((ROOT / "demo_frames").rglob("*.jpg"))
+    with FakeVlmServer(lambda p: {"content": LOOP, "finish_reason": "length"}) as s:
+        r = VlmApiDescriber("m", s.url, "R3", retries=1).describe_frame(str(frame))
+        assert r["status"] == "truncated" and r["people_count"] is None and r["records"] == []
+        assert r["finish_reason"] == "length" and r["raw_response"] == LOOP and r["attempts"] == 1 and len(s.requests) == 1
+        c = VlmApiDescriber("m", s.url, "R1").describe_crop(IMG)
+        assert c["status"] == "truncated" and c["record"] is None
+        n = len(s.requests)
+        b = VlmApiDescriber("m", s.url, "R1", "B").describe_crop(IMG)  # step 1 cut -> step 2 not sent
+        assert b["status"] == "truncated" and len(s.requests) == n + 1 and b["raw_response"].startswith("STEP1:")
+    with FakeVlmServer(_handler) as s:
+        r = VlmApiDescriber("m", s.url, "R2").describe_frame(str(frame))
+        assert r["status"] == "ok" and r["finish_reason"] == "stop" and r["completion_tokens"] == 10
+        assert r["raw_response"].startswith("<think>")  # raw = before stripping <think>
+
+
+def test_penalties_and_max_tokens_only_sent_when_given():
+    with FakeVlmServer(_handler) as s:
+        VlmApiDescriber("m", s.url, "R1").describe_crop(IMG)
+        VlmApiDescriber("m", s.url, "R1", frequency_penalty=0.5, repetition_penalty=1.1, max_tokens=777).describe_crop(IMG)
+        plain, tuned = s.requests
+    assert set(plain) == {"model", "temperature", "max_tokens", "messages"} and plain["max_tokens"] == vlm_api.MAX_TOKENS_CROP
+    assert tuned["frequency_penalty"] == 0.5 and tuned["repetition_penalty"] == 1.1 and tuned["max_tokens"] == 777
+    assert {k: v for k, v in tuned.items() if k not in ("frequency_penalty", "repetition_penalty", "max_tokens")} == \
+           {k: v for k, v in plain.items() if k != "max_tokens"}
+
+
+def _run_count(tmp_path, handler, *extra, boxes=None, min_h="0"):
+    import sys
+    proj = tmp_path / "p"
+    proj.mkdir(exist_ok=True)
+    if not (proj / "snapshots.json").exists():
+        _make_project(proj)
+    if boxes is not None:
+        snaps = json.loads((proj / "snapshots.json").read_text())
+        snaps["snapshots"][0]["boxes"] = boxes
+        (proj / "snapshots.json").write_text(json.dumps(snaps))
+    out = tmp_path / "o" / f"c{len(list((tmp_path).glob('o/c*.jsonl')))}.jsonl"
+    with FakeVlmServer(handler) as s:
+        r = subprocess.run([sys.executable, "-I", str(ROOT / "vlm/run_predictions.py"), "count", "--mode", "R3",
+                            "--snapshots", str(proj / "snapshots.json"), "--frames-dir", str(proj / "frames"), "--model", "f",
+                            "--api-url", s.url, "--min-box-height", min_h, "--out", str(out), *extra],
+                           capture_output=True, text=True)
+        reqs = list(s.requests)
+    assert r.returncode == 0, r.stderr
+    runs = [json.loads(x) for x in (out.parent / "runs.jsonl").read_text().splitlines()]
+    return json.loads(out.read_text().splitlines()[0]), reqs, runs[-1]
+
+
+def test_runner_count_truncated_suspicious_raw_and_params(tmp_path):
+    long = LOOP * 20
+    row, reqs, run = _run_count(tmp_path, lambda p: {"content": long, "finish_reason": "length"})
+    assert row["status"] == "truncated" and row["people_count"] is None and row["suspicious"] is False
+    assert row["finish_reason"] == "length" and row["raw_response"] == long[:2000] and row["completion_tokens"] == 10
+    assert run["params"]["frequency_penalty"] is None and run["params"]["max_tokens"] is None
+    assert "frequency_penalty" not in reqs[0] and "repetition_penalty" not in reqs[0]
+    # 0 people but the detector has boxes (both are >= 0 px) -> ok + suspicious
+    row, _, _ = _run_count(tmp_path, lambda p: '{"people":[]}')
+    assert row["status"] == "ok" and row["people_count"] == 0 and row["suspicious"] is True and row["raw_response"] == '{"people":[]}'
+    # boxes are 200 and 60 px high; with --min-box-height 300 none pass the filter -> not suspicious
+    row, _, _ = _run_count(tmp_path, lambda p: '{"people":[]}', min_h="300")
+    assert row["status"] == "ok" and row["suspicious"] is False
+    row, _, _ = _run_count(tmp_path, lambda p: '{"people":[]}', boxes=[])
+    assert row["suspicious"] is False
+    # penalties: sent and logged
+    row, reqs, run = _run_count(tmp_path, _handler, "--frequency-penalty", "0.3", "--repetition-penalty", "1.05",
+                                "--max-tokens", "512")
+    assert row["status"] == "ok" and row["people_count"] == 2 and row["suspicious"] is False
+    assert reqs[0]["frequency_penalty"] == 0.3 and reqs[0]["repetition_penalty"] == 1.05 and reqs[0]["max_tokens"] == 512
+    assert run["params"]["frequency_penalty"] == 0.3 and run["params"]["repetition_penalty"] == 1.05 and run["params"]["max_tokens"] == 512
+
+
+def test_runner_crops_lines_have_raw_answer_and_truncated(tmp_path):
+    import sys
+    proj = tmp_path / "p"
+    proj.mkdir()
+    _make_project(proj)
+    calls = []
+
+    def handler(p):
+        calls.append(1)
+        return {"content": '{"clothing_color":"re', "finish_reason": "length"} if len(calls) == 1 else _handler(p)
+    with FakeVlmServer(handler) as s:
+        r = subprocess.run([sys.executable, "-I", str(ROOT / "vlm/run_predictions.py"), "crops", "--snapshots", str(proj / "snapshots.json"),
+                            "--frames-dir", str(proj / "frames"), "--model", "f", "--api-url", s.url, "--workers", "1",
+                            "--out", str(tmp_path / "o/p.jsonl")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    rows = [json.loads(x) for x in (tmp_path / "o/p.jsonl").read_text().splitlines()]
+    assert [x["status"] for x in rows] == ["truncated", "ok"] and rows[0]["record"] is None
+    assert rows[1]["raw_response"].startswith('{"clothing_color":"red"') and rows[1]["finish_reason"] == "stop"
+    assert all(x["suspicious"] is False and x["prompt_tokens"] == 100 for x in rows)
+    preds = bench_clothing.load_predictions(tmp_path / "o/p.jsonl")  # truncated lines count as failures on the Mac
+    assert sum(1 for v in preds.values() if v["status"] == "ok") == 1
 
 
 def test_exclude_fewshot_sources_from_gold(tmp_path):
