@@ -111,6 +111,90 @@ python3 -m eval.summarize_runs --dir server_runs
 - Для R2/R3/R4 считаются среднее, СКО, минимум и максимум `people_count` по ok-строкам и число `suspicious`.
 - Старые файлы (до появления `raw_response`, `finish_reason` и `suspicious`) читаются без ошибок и помечены `old`. В них `suspicious` пустой, то есть неизвестен (это не 0). Обрезанные ответы в них записаны как `error`, поэтому truncated = 0 там ничего не значит.
 
+## Прогоны по кропам Арай (два видео, режим по индексу)
+С этого места VLM получает **готовые кропы Арай**, а не режет кадры сама. Сравнение с её методами (M1–M3) идёт на одних и тех же людях.
+Схема индекса проверена по `arai_data/video*/video*_crops_index.json` (это выход `cv/crop_people.py`): список записей `crop_id, video_id, snapshot_id, person_idx, box, box_h, box_w, h_bucket, frame_path, kept, reason, path, full_path`.
+- Шлём только `kept=true`. Отсеянные записи (`reason`: `dup_of_pNN`, `too_small`, `bad_box`) не отправляются.
+- Кроп — готовый файл `<папка индекса>/<crop_id>.jpg` (так лежит у Арай) или `<папка>/full/<crop_id>.jpg`. Заново ничего не режется; мелкий кроп только увеличивается до 336 px, как раньше.
+- `snapshot_id` и `crop_id` повторяются в обоих видео (`sn_0000_p00` есть в обоих). Поэтому ключ везде `(video_id, snapshot_id, person_idx)`, а папки задаются **по одной на индекс, в том же порядке**. Одна папка на два индекса отклоняется с ошибкой.
+- video_id: видео 1 — `2018-03-15.15-00-00.15-05-00.school.G421.r13` (156 кропов из 159 рамок), видео 2 — `2018-03-07.17-35-00.17-40-00.school.G421.r13` (147 из 152). Оба проверены по индексам.
+
+**Что скопировать на сервер** (дополнительно к разделу 0; `arai_data/` не в git):
+```bash
+ssh <ПОЛЬЗОВАТЕЛЬ>@<СЕРВЕР> "mkdir -p ~/work/data/arai"
+```
+```bash
+scp -r arai_data/video1 arai_data/video2 <ПОЛЬЗОВАТЕЛЬ>@<СЕРВЕР>:~/work/data/arai/
+```
+Кадры видео 1 уже лежат в `~/work/data/frames`. Кадров видео 2 пока нет. Когда появятся, положи их в `~/work/data/frames_video2/` (имена `sn_XXXX.jpg`).
+
+**Переменные** (одни на все модели; меняется только `M`, у V3 добавь `--disable-thinking` к каждой команде):
+```bash
+M=qwen3-vl-4b-awq; A=$HOME/work/data/arai; CI="--crops-index $A/video1/video1_crops_index.json $A/video2/video2_crops_index.json"; FI="--frames-index $A/video1/video1_frames_index.json $A/video2/video2_frames_index.json --frames-dir $HOME/work/data/frames $HOME/work/data/frames_video2"
+```
+Имена моделей на сервере: `qwen3-vl-4b-awq` (V1), `qwen3-vl-8b-awq` (V2), `qwen3.5-4b-awq` (V3), `gemma3-4b-w4a16` (V4).
+
+**Одежда R1 по обоим видео** (вариант A, второй проход для повторяемости):
+```bash
+python3 vlm/run_predictions.py crops $CI --model $M --variant A --repeat 2 --workers 4 --out ~/work/runs/arai/pred_clothing_${M}_R1_A.jsonl
+```
+Пишутся два файла:
+- наш `~/work/runs/arai/pred_clothing_<M>_R1_A.jsonl`;
+- плоский файл Арай `~/work/runs/arai/flat/pred_clothing_<M>_R1_A.jsonl` (плюс `_repeat2` к обоим).
+
+Варианты B и D: те же команды с `--variant B` / `--variant D` и своим именем `--out`.
+
+**Счёт R2 / R3 / R4.** Видео без папки кадров пропускается с сообщением `ПРОПУСК <video_id> …`. Сейчас это видео 2, его строк в файле не будет. Если кадров нет ни у одного видео, команда остановится.
+```bash
+python3 vlm/run_predictions.py count --mode R2 $FI --model $M --workers 2 --out ~/work/runs/arai/count_${M}_R2.jsonl
+```
+```bash
+python3 vlm/run_predictions.py count --mode R3 $FI --model $M --workers 2 --out ~/work/runs/arai/count_${M}_R3.jsonl
+```
+```bash
+python3 vlm/run_predictions.py count --mode R4 $FI $CI --model $M --workers 2 --out ~/work/runs/arai/count_${M}_R4.jsonl
+```
+- R4 кладёт в промпт только рамки `kept=true` (без дублей). В строке поле `box_person_idx` показывает, какие `person_idx` стоят за номерами 0, 1, 2… в промпте.
+- `suspicious` считается по `kept`-рамкам (в R2/R3 без `--crops-index` берётся `n_kept` из `frames_index.json`).
+- `runs.jsonl` получает по строке на каждое видео.
+- Повторный прогон видео 2, когда появятся кадры: те же команды, другой `--out`.
+
+**Подсчёт на Mac:**
+```bash
+scp -r <ПОЛЬЗОВАТЕЛЬ>@<СЕРВЕР>:~/work/runs/arai ./server_runs_arai
+```
+```bash
+python3 -m eval.summarize_runs --dir server_runs_arai
+```
+```bash
+python3 -m eval.score_methods people --gold eval/gold/gold_people.csv --pred "server_runs_arai/flat/pred_clothing_*_R1_?.jsonl" results/hist__crop__A.jsonl results/siglip__crop__A.jsonl --out-md results/clothing_all.md
+```
+- `summarize_runs` даёт отдельную строку на каждое видео.
+- В плоском файле строка не ok (truncated / ошибка / кроп не найден) записана как `color = type = "unknown"`. Поэтому `score_methods` засчитывает её **промахом**, а не пропускает, и она попадает в долю unknown.
+- `bench_count` читает файл счёта только по одному `video_id` (он берётся из `--snapshots`). Без `video_id` файл с двумя видео отклоняется.
+
+### Чем считать итоговую таблицу (сравнение `bench_clothing` / `bench_count` / `score_methods`)
+**Рекомендация.** Одежду всех методов (M1–M3 и VLM) считать одним скриптом: `eval.score_methods people` по плоским файлам. Тогда у всех одна агрегация эталона и одна формула. VLM-строки сверять с `eval.bench_clothing --predictions <наш jsonl>`: только он даёт повторяемость, тип по бакетам высоты и матрицу ошибок по типу. Счёт людей:
+- VLM (R2–R4) против эталона — `eval.bench_count`, по одному видео за запуск;
+- сырой YOLO против YOLO без дублей — `eval.score_methods count`.
+
+Перед итоговой таблицей правило по нескольким разметчикам должно быть одно в обоих скриптах (см. п. 2). Ничего не удалено, оба набора скриптов работают.
+
+Дублируется: accuracy, macro-F1, top-2, доля unknown / black, точность по бакетам высоты, матрица ошибок, MAE / точные / недосчёт / пересчёт / смещение.
+Есть только у нас: повторяемость (`--repeat 2`), kappa (`eval/agreement.py`, между разметчиками), доля неответов (`n_errors` / `n_failed`), тип по бакетам, исключение few-shot примеров, нет зависимости от sklearn.
+Есть только у Арай: сравнение «сырой YOLO против YOLO без дублей», готовое чтение `snapshots_vlm.json`, чтение эталона по маске (несколько CSV).
+
+Расхождения в определениях (числа двух скриптов на одних данных могут отличаться):
+1. **Нет предсказания.** `bench_*` считает такого человека ошибкой (`n_errors`). `score_methods` его молча пропускает. Поэтому в плоском формате не-ok строки пишутся как unknown.
+2. **Несколько разметчиков.** Одежда: оба берут большинство, при ничьей объект пропускается (в `score_methods` целиком при ничьей по цвету, в `bench_clothing` отдельно по цвету и типу). Счёт: `bench_count` берёт большинство, а кадр с ничьей выкидывает; `score_methods count` берёт нижнюю медиану.
+3. **macro-F1.** У нас классы = эталон ∪ предсказания, у Арай только классы эталона (`labels=sorted(set(y))`). Лишний предсказанный класс у Арай не штрафуется, у нас штрафуется.
+4. **Доли unknown / black.** У нас считаются среди ответивших, у Арай среди всех пар (с нашими unknown-заглушками туда входят и неответы).
+5. **Бакеты высоты.** У нас берётся `box_h` из эталона, и рамка ровно 150 px идёт в «80-150». У Арай `box_h` берётся из предсказания и 150 px идёт в «>150» (как `h_bucket` в индексе).
+6. **Тип.** `score_methods` не считает тип, если метод выдаёт только unknown (M1). `bench_clothing` считает всегда.
+7. **Счёт.** У нас точные / недосчёт / пересчёт — доли, неответы исключаются и показываются отдельно (`n_failed`). У Арай недосчёт / пересчёт — штуки, неответов нет (YOLO всегда отвечает).
+8. **Секунды.** У нас время одного запроса при параллельных запросах (`--workers`). У Арай время пакета, делённое на число кропов. Скорость VLM и CV по этим числам напрямую сравнивать нельзя.
+9. **Невидимые люди.** `score_methods` по умолчанию выкидывает `visible` = «не видно» / `not_visible`. `bench_clothing` делает это только с `--exclude-visible`.
+
 ## После четырёх моделей: победитель (поднимаем только его, по одной команде)
 - Режимы R3 и R4 (счёт + одежда по кадру): `python3 vlm/run_predictions.py count --mode R3` и `--mode R4` на сервере, затем `--counts R3=... --counts R4=...` на Mac.
 - Промпты B и D: `python3 vlm/run_predictions.py crops ... --variant B`, затем `--variant D`.

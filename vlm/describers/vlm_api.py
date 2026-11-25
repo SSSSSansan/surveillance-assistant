@@ -32,13 +32,14 @@ import describe_snapshot as ds
 import prompts
 
 from . import base  # noqa: F401  (also makes sure vlm/ is on sys.path via __init__)
-from .base import BaseDescriber, make_record
+from .base import Describer, make_answer
 
 MAX_TOKENS_COUNT = 64
 MAX_TOKENS_CROP = ds.MAX_TOKENS_CROP
 MAX_TOKENS_FRAME = ds.MAX_TOKENS
 MAX_TOKENS_BOXES = 2048
 MAX_TOKENS_STEP1 = 200
+MIN_CROP_SIDE = 336
 
 _THINK = re.compile(r"<think>.*?</think>", re.S | re.I)
 
@@ -155,7 +156,11 @@ def parse_boxes(text: str, n_boxes: int):
 
 # ------------------------------------------------------------------ class ---
 
-class VlmApiDescriber(BaseDescriber):
+class VlmApiDescriber(Describer):
+    """Arai's Describer contract (vlm/describers/base.py): describe(img_bgr) -> contract answer.
+    The server runner uses describe_crop / describe_frame, which also return status, raw_response, tokens."""
+    needs_full_body = True  # the VLM gets the whole person (full/<crop_id>.jpg), not the torso
+
     def __init__(self, model: str = ds.MODEL, api_url: str = ds.API_URL, mode: str = "R1",
                  prompt_variant: str = "A", disable_thinking: bool = False, timeout: int = ds.TIMEOUT_SEC,
                  retries: int = 1, fewshot_path=None, method_name: str = None, frequency_penalty: float = None,
@@ -331,9 +336,26 @@ class VlmApiDescriber(BaseDescriber):
 
     # ---- helpers
     def _record(self, p: dict) -> dict:
-        return make_record(p["clothing_color"], p["clothing_type"], self.method, self.mode,
-                           self.prompt_variant, color_2=p.get("clothing_color_2"),
-                           confidence=p.get("confidence"), description=p.get("description", ""))
+        return make_answer(color=p["clothing_color"], color_2=p.get("clothing_color_2"), type=p["clothing_type"],
+                           confidence=p.get("confidence"), description=p.get("description", "") or "",
+                           method=self.method, mode=self.mode, prompt_variant=self.prompt_variant)
+
+    def describe(self, img_bgr) -> dict:
+        """Describer.describe: BGR crop (numpy, as cv2.imread gives) -> one contract answer (mode R1 only).
+        A not-ok answer becomes color/type "unknown" with status, finish_reason and error in extras."""
+        import cv2
+        h, w = img_bgr.shape[:2]
+        if max(h, w) < MIN_CROP_SIDE:  # the same upscaling as imgutil.crop_data_url in the server runner
+            k = MIN_CROP_SIDE / max(h, w)
+            img_bgr = cv2.resize(img_bgr, (max(1, round(w * k)), max(1, round(h * k))), interpolation=cv2.INTER_CUBIC)
+        ok, buf = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        if not ok:
+            raise ValueError("cannot encode the crop as JPEG")
+        r = self.describe_crop("data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode())
+        if r["status"] == "ok":
+            return r["record"]
+        return make_answer(confidence=None, method=self.method, mode=self.mode, prompt_variant=self.prompt_variant,
+                           status=r["status"], finish_reason=r["finish_reason"], error=r["error"])
 
     @staticmethod
     def _result(r: dict, record=None) -> dict:

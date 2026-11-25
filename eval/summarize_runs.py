@@ -10,7 +10,9 @@ Reads every *.jsonl in --dir except runs.jsonl (logs and other files are ignored
 are taken from the lines themselves, tag = file name. A *_repeat2 file is not a row of its own: it is only used for
 the repeatability of its base file.
 
-One row per model x mode x variant x tag:
+One row per model x mode x variant x tag x video_id. A file of the index mode (crops_index.json of two videos)
+holds several videos with the SAME snapshot_id / crop_id (sn_0000 is in both): it is split by video_id, and the
+repeatability pairs are matched on (video_id, snapshot_id, person_idx), never on snapshot_id alone.
     rows, ok / truncated / error shares (error = everything that is neither ok nor truncated: error, skipped;
     the three shares add up to 1), mean and p95 of seconds (lines with seconds only),
     R1: black and unknown shares of color (among ok lines), repeatability vs *_repeat2 (share of the same color and
@@ -35,10 +37,10 @@ RE_CROPS = re.compile(r"^pred_clothing_(?P<model>.+)_R1_(?P<variant>[A-D])(?P<re
 RE_COUNT = re.compile(r"^count_(?P<model>.+)_(?P<mode>R[234])(?P<rest>.*)\.jsonl$")
 RE_REPEAT = re.compile(r"_repeat(\d+)")
 
-COLUMNS = ["model", "mode", "variant", "tag", "file", "format", "rows", "ok_share", "truncated_share", "error_share",
+COLUMNS = ["model", "mode", "variant", "tag", "video_id", "file", "format", "rows", "ok_share", "truncated_share", "error_share",
            "sec_mean", "sec_p95", "black_share", "unknown_share", "repeat_pairs", "repeat_color_same",
            "repeat_type_same", "count_mean", "count_std", "count_min", "count_max", "suspicious", "bad_lines"]
-HEADERS = {"model": "модель", "mode": "режим", "variant": "вариант", "tag": "метка", "file": "файл",
+HEADERS = {"model": "модель", "mode": "режим", "variant": "вариант", "tag": "метка", "video_id": "видео", "file": "файл",
            "format": "формат", "rows": "строк", "ok_share": "ok", "truncated_share": "truncated",
            "error_share": "ошибка", "sec_mean": "сек ср.", "sec_p95": "сек p95", "black_share": "black",
            "unknown_share": "unknown", "repeat_pairs": "пар повтора", "repeat_color_same": "повтор цвет",
@@ -111,7 +113,9 @@ def summarize(rows, info, repeat_rows=None):
     st = [r.get("status") for r in rows]
     new_format = any("finish_reason" in r or "raw_response" in r for r in rows)
     secs = [float(r["seconds"]) for r in rows if _num(r.get("seconds"))]
+    vids = sorted({str(r.get("video_id")) for r in rows if r.get("video_id") is not None})
     out = {"model": info["model"], "mode": info["mode"], "variant": info["variant"], "tag": info["tag"],
+           "video_id": ", ".join(vids),
            "format": "new" if new_format else "old", "rows": n,
            "ok_share": share(st.count("ok"), n), "truncated_share": share(st.count("truncated"), n),
            "error_share": share(sum(1 for s in st if s not in ("ok", "truncated")), n),
@@ -142,7 +146,7 @@ def summarize(rows, info, repeat_rows=None):
 
 
 def collect(folder):
-    """-> list of summary rows, sorted by model, mode, variant, tag."""
+    """-> list of summary rows, sorted by model, mode, variant, tag, video_id."""
     files = sorted(p for p in Path(folder).glob("*.jsonl") if p.name != "runs.jsonl")
     loaded = {}
     for p in files:
@@ -157,14 +161,17 @@ def collect(folder):
                 if qinfo["repeat"] is not None and all(qinfo[k] == info[k] for k in ("model", "mode", "variant", "tag")):
                     rep = qrows
                     break
-        s = summarize(rows, info, rep)
-        s.update(file=p.name, bad_lines=bad)
-        result.append(s)
+        for vid in sorted({r.get("video_id") for r in rows} or {None}, key=str):  # one row per video
+            vrows = [r for r in rows if r.get("video_id") == vid]
+            vrep = None if rep is None else [r for r in rep if r.get("video_id") == vid]
+            s = summarize(vrows, info, vrep)
+            s.update(file=p.name, bad_lines=bad)
+            result.append(s)
     orphans = [p.name for p, v in loaded.items() if v[2]["repeat"] is not None and not any(
         all(v[2][k] == b[2][k] for k in ("model", "mode", "variant", "tag")) for b in bases.values())]
     for name in orphans:
         print(f"повтор без основного файла, пропущен: {name}", file=sys.stderr)
-    result.sort(key=lambda r: (r["model"] or "", r["mode"] or "", r["variant"] or "", r["tag"] or ""))
+    result.sort(key=lambda r: (r["model"] or "", r["mode"] or "", r["variant"] or "", r["tag"] or "", r["video_id"] or ""))
     return result
 
 
@@ -179,7 +186,7 @@ def _fmt(v):
 def to_markdown(rows):
     r1 = [r for r in rows if r["mode"] == "R1"]
     cnt = [r for r in rows if r["mode"] != "R1"]
-    base = ["model", "mode", "variant", "tag", "format", "rows", "ok_share", "truncated_share", "error_share",
+    base = ["model", "mode", "variant", "tag", "video_id", "format", "rows", "ok_share", "truncated_share", "error_share",
             "sec_mean", "sec_p95"]
     parts = []
     for title, rs, extra in (("Одежда (R1)", r1, ["black_share", "unknown_share", "repeat_pairs",

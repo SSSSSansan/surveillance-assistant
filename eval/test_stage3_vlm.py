@@ -14,7 +14,7 @@ import eval.bench_common as bc  # noqa: F401  (puts repo root and vlm/ on sys.pa
 from eval import agreement, bench_clothing, bench_count, metrics as M
 from eval.fake_vlm_server import FakeVlmServer
 from vlm.describers import vlm_api
-from vlm.describers.base import validate_record
+from vlm.describers import base
 from vlm.describers.vlm_api import VlmApiDescriber
 
 import describe_snapshot as ds
@@ -22,6 +22,24 @@ import prompts
 
 ROOT = Path(__file__).resolve().parents[1]
 IMG = "data:image/jpeg;base64,AA=="
+CONTRACT = ("color", "color_2", "type", "confidence", "description", "method", "mode", "prompt_variant")
+
+
+def validate_record(rec: dict) -> list:
+    """Problems of one answer against Arai's contract (base.make_answer keys, base.COLORS / base.TYPES)."""
+    problems = [f"missing key {k}" for k in CONTRACT if k not in rec]
+    if problems:
+        return problems
+    if rec["color"] not in base.COLORS:
+        problems.append(f"color {rec['color']!r} not in vocabulary")
+    if rec["color_2"] is not None and rec["color_2"] not in base.COLORS:
+        problems.append(f"color_2 {rec['color_2']!r} not in vocabulary")
+    if rec["type"] not in base.TYPES:
+        problems.append(f"type {rec['type']!r} not in vocabulary")
+    c = rec["confidence"]
+    if c is not None and not (isinstance(c, (int, float)) and not isinstance(c, bool) and 0 <= c <= 1):
+        problems.append(f"confidence {c!r} not in 0..1")
+    return problems
 
 
 # ------------------------------------------------------------- parsing ---
@@ -686,3 +704,250 @@ def test_summarize_runs_empty_or_missing_dir(tmp_path):
     assert S.main(["--dir", str(tmp_path / "nope")]) == 2
     (tmp_path / "e").mkdir()
     assert S.main(["--dir", str(tmp_path / "e")]) == 1
+
+
+# ------------------------------------------------- index mode (Arai's crops) ---
+ARAI_FLAT_KEYS = {"video_id", "snapshot_id", "person_idx", "crop_id", "box_h", "box", "sec", "color", "color_2", "type",
+                  "confidence", "description", "method", "mode", "prompt_variant"}
+
+
+def _make_index_project(root):
+    """Two videos as cv/crop_people.py writes them: crops_index.json + frames_index.json + full/<crop_id>.jpg.
+    p01 is a duplicate (kept=false, no file). In video B the crop file of p02 is missing."""
+    from PIL import Image
+    for vid, name in (("vidA", "v1"), ("vidB", "v2")):
+        d = root / name
+        (d / "full").mkdir(parents=True)
+        (d / "frames").mkdir()
+        Image.new("RGB", (400, 300), (90, 90, 90)).save(d / "frames" / "sn_0000.jpg")
+        crops = []
+        for idx, (box, reason) in enumerate([([10, 10, 110, 210], None), ([12, 12, 108, 205], "dup_of_p00"),
+                                             ([200, 100, 260, 200], None)]):
+            cid = f"sn_0000_p{idx:02d}"
+            c = {"crop_id": cid, "video_id": vid, "snapshot_id": "sn_0000", "person_idx": idx, "t": 0.0, "box": box,
+                 "box_h": float(box[3] - box[1]), "box_w": float(box[2] - box[0]), "h_bucket": ">150",
+                 "frame_path": "frames/sn_0000.jpg", "kept": reason is None, "reason": reason}
+            if reason is None:
+                c["path"], c["full_path"] = f"elsewhere/torso/{cid}.jpg", f"elsewhere/full/{cid}.jpg"
+                if not (vid == "vidB" and idx == 2):
+                    Image.new("RGB", (box[2] - box[0], box[3] - box[1]), (200, 30, 30)).save(d / "full" / f"{cid}.jpg")
+            crops.append(c)
+        (d / "crops_index.json").write_text(json.dumps(crops))
+        (d / "frames_index.json").write_text(json.dumps([{
+            "video_id": vid, "snapshot_id": "sn_0000", "t": 0.0, "frame_path": "frames/sn_0000.jpg", "people_count": 3,
+            "n_dups": 1, "n_too_small": 0, "people_after_dedup": 2, "n_kept": 2}]))
+    with open(root / "gold_people.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["video_id", "snapshot_id", "person_idx", "color", "type", "visible", "box_h", "labeler"])
+        for vid in ("vidA", "vidB"):
+            for idx in (0, 2):
+                w.writerow([vid, "sn_0000", idx, "red", "sweater", "да", 200, "a"])
+
+
+def _runner(args, handler):
+    import sys
+    with FakeVlmServer(handler) as s:
+        r = subprocess.run([sys.executable, "-I", str(ROOT / "vlm/run_predictions.py"), *args, "--model", "f",
+                            "--api-url", s.url], capture_output=True, text=True)
+        reqs = list(s.requests)
+    return r, reqs
+
+
+def _lines(p):
+    return [json.loads(x) for x in Path(p).read_text().splitlines()]
+
+
+def test_runner_crops_index_mode_kept_only_ready_files_and_flat_format(tmp_path):
+    import sys
+    _make_index_project(tmp_path)
+    calls = []
+
+    def handler(p):
+        calls.append(1)
+        return {"content": '{"clothing_color":"re', "finish_reason": "length"} if len(calls) == 1 else _handler(p)
+    out = tmp_path / "o" / "pred_clothing_f_R1_A.jsonl"
+    r, reqs = _runner(["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), str(tmp_path / "v2/crops_index.json"),
+                       "--workers", "1", "--out", str(out)], handler)
+    assert r.returncode == 0, r.stderr
+    assert len(reqs) == 3  # 2 kept in A, 1 kept with a file in B; the duplicate p01 is never sent
+    rows = _lines(out)
+    assert [(x["video_id"], x["person_idx"], x["status"]) for x in rows] == [
+        ("vidA", 0, "truncated"), ("vidA", 2, "ok"), ("vidB", 0, "ok"), ("vidB", 2, "skipped")]
+    assert rows[1]["crop_id"] == "sn_0000_p02" and rows[1]["box"] == [200, 100, 260, 200] and rows[1]["box_h"] == 100.0
+    assert "crop file not found" in rows[3]["error"] and rows[0]["raw_response"] == '{"clothing_color":"re'
+    flat = _lines(tmp_path / "o" / "flat" / "pred_clothing_f_R1_A.jsonl")
+    assert len(flat) == 4 and all(ARAI_FLAT_KEYS <= set(x) for x in flat)
+    assert flat[1]["color"] == "red" and flat[1]["type"] == "sweater" and flat[1]["method"] == "vlm:f" and flat[1]["mode"] == "crop"
+    assert [(x["color"], x["type"], x["status"]) for x in (flat[0], flat[3])] == [
+        ("unknown", "unknown", "truncated"), ("unknown", "unknown", "skipped")]
+    assert flat[0]["finish_reason"] == "length" and flat[1]["sec"] is not None
+    sample = ROOT / "results" / "hist__crop__A.jsonl"  # Arai's real file: our flat line has at least her keys
+    if sample.exists():
+        assert set(_lines(sample)[0]) <= set(flat[0])
+    runs = _lines(tmp_path / "o" / "runs.jsonl")
+    assert [x["video_id"] for x in runs] == ["vidA", "vidB"] and runs[0]["params"]["source"] == "crops_index"
+    assert not (tmp_path / "o" / "summary_runs.csv").exists()
+    # summarize_runs reads only the top folder (the flat copy is no row) and splits the file per video
+    from eval import summarize_runs
+    summ = summarize_runs.collect(tmp_path / "o")
+    assert [(x["file"], x["video_id"], x["rows"], x["ok_share"]) for x in summ] == [
+        ("pred_clothing_f_R1_A.jsonl", "vidA", 2, 0.5), ("pred_clothing_f_R1_A.jsonl", "vidB", 2, 0.5)]
+    # score_methods reads our flat file; truncated / skipped people are misses (n = 4, 2 right), not dropped
+    from eval import score_methods
+    assert len(score_methods.load_preds(tmp_path / "o" / "flat" / "pred_clothing_f_R1_A.jsonl")) == 4
+    sm = subprocess.run([sys.executable, "-m", "eval.score_methods", "people", "--gold", str(tmp_path / "gold_people.csv"),
+                         "--pred", str(tmp_path / "o" / "flat" / "*.jsonl")], capture_output=True, text=True, cwd=ROOT)
+    assert sm.returncode == 0, sm.stderr
+    assert "| pred_clothing_f_R1_A | 4 | 0.500 |" in sm.stdout
+
+
+def test_runner_crops_index_root_override_and_errors(tmp_path):
+    _make_index_project(tmp_path)
+    (tmp_path / "copy").mkdir()
+    import shutil
+    shutil.copytree(tmp_path / "v1" / "full", tmp_path / "copy" / "full")
+    out = tmp_path / "o" / "p.jsonl"
+    r, reqs = _runner(["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), "--crops-root", str(tmp_path / "copy"),
+                       "--out", str(out), "--out-flat", str(tmp_path / "flat.jsonl"), "--repeat", "2"], _handler)
+    assert r.returncode == 0, r.stderr
+    assert len(reqs) == 4
+    assert [x["status"] for x in _lines(out)] == ["ok", "ok"] and len(_lines(tmp_path / "flat.jsonl")) == 2
+    assert len(_lines(tmp_path / "flat_repeat2.jsonl")) == 2 and len(_lines(tmp_path / "o" / "p_repeat2.jsonl")) == 2
+    r, _ = _runner(["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), "--snapshots", "x", "--out", str(out)], _handler)
+    assert r.returncode == 2 and "OR --crops-index" in r.stderr
+    r, _ = _runner(["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), str(tmp_path / "v2/crops_index.json"),
+                    "--crops-root", "a", "b", "c", "--out", str(out)], _handler)
+    assert r.returncode != 0 and "per index file" in r.stderr
+    # two videos have the same crop ids (sn_0000_p00): one shared crops folder is refused
+    r, _ = _runner(["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), str(tmp_path / "v2/crops_index.json"),
+                    "--crops-root", str(tmp_path / "copy"), "--out", str(out)], _handler)
+    assert r.returncode != 0 and "names repeat in every video" in r.stderr
+
+
+def test_runner_count_index_mode_r4_gets_only_kept_boxes(tmp_path):
+    _make_index_project(tmp_path)
+    fi = [str(tmp_path / "v1/frames_index.json"), str(tmp_path / "v2/frames_index.json")]
+    ci = [str(tmp_path / "v1/crops_index.json"), str(tmp_path / "v2/crops_index.json")]
+    fd = [str(tmp_path / "v1"), str(tmp_path / "v2")]
+    out = tmp_path / "o" / "count_f_R4.jsonl"
+    r, reqs = _runner(["count", "--mode", "R4", "--frames-index", *fi, "--frames-dir", *fd, "--crops-index", *ci,
+                       "--out", str(out)], _handler)
+    assert r.returncode == 0, r.stderr
+    assert len(reqs) == 2
+    for q in reqs:
+        t = q["messages"][-1]["content"][-1]["text"]
+        assert "0: [10, 10, 110, 210]" in t and "1: [200, 100, 260, 200]" in t and "2: [" not in t and "[12, 12" not in t
+    rows = _lines(out)
+    assert [(x["video_id"], x["status"], x["people_count"], x["box_person_idx"]) for x in rows] == [
+        ("vidA", "ok", 2, [0, 2]), ("vidB", "ok", 2, [0, 2])]
+    # R4 without the crops index: refused (the boxes would be unknown)
+    r, _ = _runner(["count", "--mode", "R4", "--frames-index", *fi, "--frames-dir", *fd, "--out", str(out)], _handler)
+    assert r.returncode == 2 and "needs --crops-index" in r.stderr
+    # R2 from frames_index only: suspicious uses n_kept; no box_person_idx outside R4
+    out2 = tmp_path / "o" / "count_f_R2.jsonl"
+    r, reqs = _runner(["count", "--mode", "R2", "--frames-index", *fi, "--frames-dir", *fd, "--out", str(out2)],
+                      lambda p: '{"people_count": 0}')
+    assert r.returncode == 0, r.stderr
+    rows = _lines(out2)
+    assert [(x["people_count"], x["suspicious"]) for x in rows] == [(0, True), (0, True)] and "box_person_idx" not in rows[0]
+    assert {x["video_id"] for x in _lines(tmp_path / "o" / "runs.jsonl")} == {"vidA", "vidB"}
+    r, _ = _runner(["count", "--frames-index", *fi, "--frames-dir", "a", "b", "c", "--out", str(out2)], _handler)
+    assert r.returncode != 0 and "per index file" in r.stderr
+    r, _ = _runner(["count", "--frames-index", *fi, "--frames-dir", fd[0], "--out", str(out2)], _handler)
+    assert r.returncode != 0 and "names repeat in every video" in r.stderr
+    # no frames folder for video B (as now for the second school video): B is skipped with a message, A runs
+    out3 = tmp_path / "o" / "count_f_R3.jsonl"
+    r, reqs = _runner(["count", "--mode", "R3", "--frames-index", *fi, "--frames-dir", fd[0], str(tmp_path / "nope"),
+                       "--out", str(out3)], _handler)
+    assert r.returncode == 0, r.stderr
+    assert "ПРОПУСК vidB" in r.stderr and str(tmp_path / "nope") in r.stderr and len(reqs) == 1
+    assert [x["video_id"] for x in _lines(out3)] == ["vidA"]
+    r, reqs = _runner(["count", "--mode", "R2", "--frames-index", fi[1], "--frames-dir", str(tmp_path / "nope"),
+                       "--out", str(out3)], _handler)
+    assert r.returncode != 0 and "ПРОПУСК vidB" in r.stderr and "запускать нечего" in r.stderr and reqs == []
+
+
+def test_runner_index_mode_on_real_stage2_frames(tmp_path):
+    """Real data, no GPU, fake server: Arai's arai_data/video*/video*_crops_index.json (crops lie right in video1/,
+    video2/), the frames of video 1 in arai_data/frames_all; video 2 has no frames yet -> its R4 is skipped."""
+    ad = ROOT / "arai_data"
+    ci = sorted(str(p) for p in ad.glob("video*/*crops_index.json"))
+    if len(ci) < 2:
+        pytest.skip("no Arai indices in arai_data/video*/")
+    fi = [c.replace("crops_index", "frames_index") for c in ci]
+    entries = [c for p in ci for c in json.loads(Path(p).read_text())]
+    kept = [c for c in entries if c["kept"]]
+    keys = {(c["video_id"], c["snapshot_id"], c["person_idx"]) for c in kept}
+    assert len(keys) == len(kept) and len({c["video_id"] for c in kept}) == 2
+    assert len({(c["snapshot_id"], c["person_idx"]) for c in kept}) < len(kept)  # sn_ ids repeat across the videos
+    out = tmp_path / "o" / "pred_clothing_f_R1_A.jsonl"
+    r, reqs = _runner(["crops", "--crops-index", *ci, "--workers", "8", "--out", str(out)], _handler)
+    assert r.returncode == 0, r.stderr
+    rows = _lines(out)
+    assert len(rows) == len(kept) == len(reqs) and all(x["status"] == "ok" for x in rows)
+    assert {(x["video_id"], x["snapshot_id"], x["person_idx"]) for x in rows} == keys
+    flat = _lines(tmp_path / "o" / "flat" / out.name)
+    assert {(x["video_id"], x["snapshot_id"], x["person_idx"]) for x in flat} == keys
+    from eval import score_methods, summarize_runs
+    assert set(score_methods.load_preds(tmp_path / "o" / "flat" / out.name)) == keys  # nothing glued together
+    by_video = {x["video_id"]: x["rows"] for x in summarize_runs.collect(tmp_path / "o")}
+    assert by_video == {v: sum(1 for c in kept if c["video_id"] == v) for v in by_video} and len(by_video) == 2
+    frames1 = ad / "frames_all"
+    if not (frames1 / "frames").is_dir():
+        return
+    out4 = tmp_path / "o" / "count_f_R4.jsonl"
+    r, reqs = _runner(["count", "--mode", "R4", "--frames-index", *fi, "--frames-dir", str(frames1), str(ad / "frames_video2"),
+                       "--crops-index", *ci, "--workers", "4", "--out", str(out4)], _handler)
+    assert r.returncode == 0, r.stderr
+    rows4 = _lines(out4)
+    v1 = json.loads(Path(fi[0]).read_text())[0]["video_id"]
+    if not (ad / "frames_video2").is_dir():
+        assert "ПРОПУСК" in r.stderr and {x["video_id"] for x in rows4} == {v1}
+    per_frame = {}
+    for c in kept:
+        per_frame.setdefault((c["video_id"], c["snapshot_id"]), []).append(c["person_idx"])
+    assert all(x["status"] == "ok" and x["box_person_idx"] == sorted(per_frame.get((x["video_id"], x["snapshot_id"]), []))
+               for x in rows4)
+    import re
+    sent = sorted(sum(1 for ln in q["messages"][-1]["content"][-1]["text"].splitlines() if re.match(r"^\d+: \[", ln))
+                  for q in reqs)
+    assert sent == sorted(len(per_frame.get((x["video_id"], x["snapshot_id"]), [])) for x in rows4)
+
+
+def test_summarize_runs_two_videos_same_snapshot_ids_are_not_glued(tmp_path):
+    from eval import summarize_runs
+
+    def line(v, sid, color, status="ok"):
+        return json.dumps({"video_id": v, "snapshot_id": sid, "person_idx": 0, "status": status, "seconds": 1.0,
+                           "finish_reason": "stop", "record": {"color": color, "type": "coat"} if status == "ok" else None})
+    (tmp_path / "pred_clothing_m_R1_A.jsonl").write_text("\n".join([line("v1", "sn_0000", "red"), line("v2", "sn_0000", "blue"),
+                                                                     line("v2", "sn_0001", "x", "truncated")]))
+    (tmp_path / "pred_clothing_m_R1_A_repeat2.jsonl").write_text("\n".join([line("v1", "sn_0000", "red"),
+                                                                             line("v2", "sn_0000", "black")]))
+    (tmp_path / "count_m_R2.jsonl").write_text("\n".join(json.dumps(
+        {"video_id": v, "snapshot_id": "sn_0000", "status": "ok", "people_count": n, "suspicious": False}) for v, n in (("v1", 3), ("v2", 9))))
+    rows = {(r["mode"], r["video_id"]): r for r in summarize_runs.collect(tmp_path)}
+    assert set(rows) == {("R1", "v1"), ("R1", "v2"), ("R2", "v1"), ("R2", "v2")}
+    assert rows[("R1", "v1")]["repeat_color_same"] == 1.0 and rows[("R1", "v2")]["repeat_color_same"] == 0.0
+    assert rows[("R1", "v2")]["rows"] == 2 and rows[("R1", "v2")]["truncated_share"] == 0.5
+    assert rows[("R2", "v1")]["count_mean"] == 3 and rows[("R2", "v2")]["count_mean"] == 9
+    assert "| видео |" in summarize_runs.to_markdown(list(rows.values()))
+    from eval import bench_count
+    with pytest.raises(SystemExit, match="several videos"):
+        bench_count.load_counts_file(tmp_path / "count_m_R2.jsonl")
+    assert bench_count.load_counts_file(tmp_path / "count_m_R2.jsonl", "v2")[0] == {"sn_0000": {"count": 9, "seconds": None}}
+
+
+def test_bench_common_crops_index_real_schema_full_crop_kept_and_one_video(tmp_path):
+    from eval.bench_common import load_crops_index
+    _make_index_project(tmp_path)
+    idx = load_crops_index(tmp_path / "v1/crops_index.json", "vidA")
+    assert set(idx) == {("vidA", "sn_0000", 0), ("vidA", "sn_0000", 2)}  # the duplicate p01 (kept=false) is out
+    assert idx[("vidA", "sn_0000", 0)]["crop_path"] == str(tmp_path / "v1/full/sn_0000_p00.jpg")
+    assert load_crops_index(tmp_path / "v1/crops_index.json", "vidB") == {}  # never another video's lines
+    real = sorted((ROOT / "arai_data").glob("video*/*crops_index.json"))
+    for p in real:  # Arai's layout: the crops lie right next to the index, without full/
+        rows = json.loads(p.read_text())
+        vid = rows[0]["video_id"]
+        got = load_crops_index(p, vid)
+        assert len(got) == sum(1 for c in rows if c["kept"]) and all(Path(v["crop_path"]).parent == p.parent for v in got.values())

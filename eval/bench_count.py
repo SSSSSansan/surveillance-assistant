@@ -46,9 +46,11 @@ def vlm_counts(describer, snaps: list, frames_dir, json_dir, workers=1) -> dict:
 
 
 def load_counts_file(path, video_id=None) -> dict:
-    """JSONL from vlm/run_predictions.py count -> {snapshot_id: {"count", "seconds"} | None}, plus the method label."""
+    """JSONL from vlm/run_predictions.py count -> {snapshot_id: {"count", "seconds"} | None}, plus the method label.
+    Only the lines of video_id are read (a file of the index mode holds several videos with the same sn_XXXX);
+    without video_id a file with several videos is refused."""
     import json
-    out, label, model = {}, None, None
+    out, label, model, seen = {}, None, None, set()
     with open(path, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
@@ -56,6 +58,10 @@ def load_counts_file(path, video_id=None) -> dict:
             r = json.loads(line)
             if video_id and r.get("video_id") != video_id:
                 continue
+            if not video_id:
+                seen.add(r.get("video_id"))
+                if len(seen) > 1:  # sn_XXXX repeat in every video: keyed by snapshot_id they would overwrite
+                    raise SystemExit(f"{path}: several videos {sorted(map(str, seen))}; pass video_id")
             label, model = r.get("method"), r.get("model")
             ok = r.get("status") == "ok" and isinstance(r.get("people_count"), int)
             out[r["snapshot_id"]] = {"count": r["people_count"], "seconds": r.get("seconds")} if ok else None

@@ -8,14 +8,33 @@ Needs only the files in vlm/ (no eval/), the standard library and OpenCV or Pill
       python3 run_predictions.py count --mode R2 --snapshots ~/work/data/snapshots.json --frames-dir ~/work/data/frames \
           --model qwen3-vl-4b --out ~/work/runs/count_qwen3-vl-4b_R2.jsonl
 
-crops line : {"video_id","snapshot_id","person_idx","box_h","record":{contract}|null,"seconds","status","error",
-              "raw_response","prompt_tokens","completion_tokens","finish_reason","suspicious":false}
+Index mode (Arai's cv/crop_people.py output; one crops_index.json / frames_index.json per video):
+  crops  --crops-index v1/crops_index.json v2/crops_index.json [--crops-root v1 v2]
+         only kept=true; the ready crop <crops-root>/full/<crop_id>.jpg is sent (no new cropping).
+         the file is <crops-root>/full/<crop_id>.jpg or <crops-root>/<crop_id>.jpg (Arai's video1/ layout).
+         --crops-root defaults to the folder of each index; if given, one per index (same order).
+         snapshot_id and crop_id repeat in every video: the key is always (video_id, snapshot_id, person_idx).
+  count  --frames-index v1/frames_index.json v2/frames_index.json --frames-dir F1 F2 [--crops-index ...]
+         frame = <frames-dir>/<frame_path>, one --frames-dir per frames index (same order). A video whose frames folder
+         does not exist is skipped with a message (ПРОПУСК ...); the run stops only if no video is left.
+         R4 needs --crops-index: only kept=true boxes are put in the prompt (box_person_idx in the line).
+Index lines are deduplicated on (video_id, snapshot_id, person_idx) / (video_id, snapshot_id), as eval/run_method.py.
+
+crops line : {"video_id","snapshot_id","person_idx","crop_id","box","box_h","record":{contract}|null,"seconds",
+              "status","error","raw_response","prompt_tokens","completion_tokens","finish_reason","suspicious":false}
+flat crops line (Arai's results/<method>__crop__<variant>.jsonl, read by `python -m eval.score_methods people`),
+written to --out-flat (default <out folder>/flat/<out stem>.jsonl, so summarize_runs does not see it):
+             {"video_id","snapshot_id","person_idx","crop_id","box_h","box","sec","color","color_2","type",
+              "confidence","description","method","mode","prompt_variant","status","finish_reason","error","raw_response"}
+             a line that is NOT ok (truncated, error, skipped) has color = type = "unknown": score_methods then
+             counts it as a miss (it skips only people with no line at all) and it shows in the unknown share.
 count line : {"video_id","snapshot_id","mode","method","model","people_count"|null,"seconds","status","error",
               "raw_response","prompt_tokens","completion_tokens","finish_reason","suspicious"}
 status: ok | truncated (finish_reason == "length": answer cut at max_tokens, result null, nothing repaired)
         | error | skipped (crops: box not sent).
 raw_response is the model text cut to 2000 characters. suspicious (count only): status ok, people_count == 0,
-but the frame has boxes in snapshots.json that pass --min-box-height. Always false for crops.
+but the frame has boxes that pass --min-box-height (snapshots.json; index mode: kept boxes of --crops-index,
+or n_kept of frames_index.json when --crops-index is not given). Always false for crops.
 --frequency-penalty / --repetition-penalty / --max-tokens are NOT sent unless given (old runs stay reproducible);
 their values (or null) go to params in runs.jsonl.
 --repeat 2 (crops) writes the second pass to <out stem>_repeat2.jsonl (for the repeatability metric).
@@ -24,6 +43,7 @@ weights, started_at, duration_sec, params). NOT VERIFIED on the real server.
 """
 import argparse
 import datetime
+import glob
 import json
 import sys
 import time
@@ -82,6 +102,73 @@ def sampling_params(a):
             "max_tokens": a.max_tokens}
 
 
+KEY_FIELDS = ("video_id", "snapshot_id", "person_idx", "crop_id", "box", "box_h")
+CONTRACT = ("color", "color_2", "type", "confidence", "description", "method", "mode", "prompt_variant")
+
+
+def expand(paths):
+    """Paths or masks (in quotes) -> sorted list of files; a mask that matches nothing stays as it is."""
+    out = []
+    for p in paths or []:
+        hit = sorted(glob.glob(str(p)))
+        out += hit if hit else [str(p)]
+    return out
+
+
+def pick(values, i, n, what):
+    """One value per index file. A single value for several files is refused: snapshot_id / crop_id repeat in every
+    video (sn_0000_p00 exists in both), so one shared folder would mix the videos up."""
+    if not values:
+        return None
+    if len(values) == n:
+        return values[i]
+    if n > 1 and len(values) == 1:
+        raise SystemExit(f"{what}: {n} index files but one folder. sn_XXXX names repeat in every video, "
+                         f"give one folder per index file, in the same order")
+    raise SystemExit(f"{what}: give one value per index file ({n}), got {len(values)}")
+
+
+def read_json(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"no file {path}")
+
+
+def load_crops_index(paths, roots):
+    """All entries of the crops_index.json files (kept or not), first one wins on a repeated key.
+    Every entry gets _root: the folder with full/<crop_id>.jpg."""
+    files = expand(paths)
+    out, seen = [], set()
+    for i, p in enumerate(files):
+        root = pick(roots, i, len(files), "--crops-root") or str(Path(p).parent)
+        for c in read_json(p):
+            key = (c["video_id"], c["snapshot_id"], int(c["person_idx"]))
+            if key not in seen:
+                seen.add(key)
+                out.append({**c, "_root": root})
+    return out
+
+
+def find_crop(c):
+    root = Path(c["_root"])
+    cands = [root / "full" / f"{c['crop_id']}.jpg", root / f"{c['crop_id']}.jpg"]
+    if c.get("full_path"):
+        fp = Path(str(c["full_path"]).replace("\\", "/"))
+        cands += [fp, root / "full" / fp.name]
+    return next((p for p in cands if p.is_file()), None)
+
+
+def flat_row(r, method, variant):
+    """Our crops line -> Arai's flat line. Not ok -> unknown answer (a miss for score_methods)."""
+    rec = r.get("record") if r.get("status") == "ok" and isinstance(r.get("record"), dict) else None
+    ans = {k: rec.get(k) for k in CONTRACT} if rec else {
+        "color": "unknown", "color_2": None, "type": "unknown", "confidence": None, "description": "",
+        "method": method, "mode": "crop", "prompt_variant": variant}
+    return {**{k: r.get(k) for k in KEY_FIELDS}, "sec": r.get("seconds"), **ans, "status": r.get("status"),
+            "finish_reason": r.get("finish_reason"), "error": r.get("error"), "raw_response": r.get("raw_response")}
+
+
 def make_describer(a, mode, variant):
     return VlmApiDescriber(a.model, a.api_url, mode, variant, a.disable_thinking, a.timeout, **sampling_params(a))
 
@@ -92,7 +179,8 @@ def build_items(snaps, video_id, frames_dir, pad, min_side, min_h):
         fp = find_frame(s.get("frame_path", ""), frames_dir)
         img = imgutil.load_image(str(fp)) if fp else None
         for idx, box in enumerate(s.get("boxes") or []):
-            key = {"video_id": video_id, "snapshot_id": s["snapshot_id"], "person_idx": idx}
+            key = {"video_id": video_id, "snapshot_id": s["snapshot_id"], "person_idx": idx,
+                   "crop_id": f"{s['snapshot_id']}_p{idx:02d}", "box": box}
             box_h = box_height(box)
             err = None
             if img is None:
@@ -110,6 +198,38 @@ def build_items(snaps, video_id, frames_dir, pad, min_side, min_h):
     return items, rows_fail
 
 
+def build_items_index(entries, min_side, min_h):
+    """Index mode: only kept=true, the ready crop file is read as it is (upscaled like crop_data_url)."""
+    items, rows_fail = [], []
+    for c in entries:
+        if not c.get("kept"):
+            continue
+        box = c.get("box")
+        key = {"video_id": c["video_id"], "snapshot_id": c["snapshot_id"], "person_idx": int(c["person_idx"]),
+               "crop_id": c.get("crop_id"), "box": box}
+        box_h = c.get("box_h") if c.get("box_h") is not None else box_height(box)
+        fp, err, url = find_crop(c), None, None
+        if fp is None:
+            err = f"crop file not found: {c.get('crop_id')}.jpg in {c['_root']}/full"
+        elif box_h is None or box_h < min_h:
+            err = "box too small / invalid (not sent)"
+        else:
+            try:
+                img = imgutil.load_image(str(fp))
+                w, h = imgutil.image_size(img)
+                url = imgutil.crop_data_url(img, [0, 0, w, h], 0.0, min_side)
+            except OSError as e:
+                err = f"crop not readable: {e}"
+            if not err and url is None:
+                err = "empty crop file"
+        if err:
+            rows_fail.append({**key, "box_h": box_h, "record": None, "seconds": None, "status": "skipped",
+                              "error": err, **NO_ANSWER, "suspicious": False})
+        else:
+            items.append({**key, "box_h": box_h, "url": url})
+    return items, rows_fail
+
+
 def one_pass(describer, items, workers):
     done = [0]
 
@@ -118,8 +238,7 @@ def one_pass(describer, items, workers):
         done[0] += 1
         if done[0] % 25 == 0:
             log(f"  {done[0]}/{len(items)}")
-        return {"video_id": it["video_id"], "snapshot_id": it["snapshot_id"], "person_idx": it["person_idx"],
-                "box_h": it["box_h"], "record": r["record"], "seconds": r["seconds"], "status": r["status"],
+        return {**{k: it[k] for k in KEY_FIELDS}, "record": r["record"], "seconds": r["seconds"], "status": r["status"],
                 "error": r["error"], **answer_fields(r), "suspicious": False}
     if workers > 1:
         with ThreadPoolExecutor(workers) as ex:
@@ -127,67 +246,128 @@ def one_pass(describer, items, workers):
     return [one(i) for i in items]
 
 
-def cmd_crops(a, snaps, video_id):
+def run_lines(run_id, started, t0, method, model, mode, variant, video_ids, params):
+    """One runs.jsonl line per video (as eval/run_method.py writes one runs.json entry per video)."""
+    dur = round(time.perf_counter() - t0, 2)
+    return [{"run_id": run_id, "video_id": v, "method": method, "model": model, "mode": mode,
+             "prompt_variant": variant, "weights": None, "started_at": started, "duration_sec": dur,
+             "params": params} for v in video_ids]
+
+
+def flat_path(a, out):
+    """Flat file next to `out`: --out-flat for the first pass, <out folder>/flat/<stem>.jsonl by default."""
+    if a.out_flat and Path(out) == Path(a.out):
+        return Path(a.out_flat)
+    if a.out_flat:
+        return Path(a.out_flat).with_name(Path(a.out_flat).stem + Path(out).stem[len(Path(a.out).stem):] + ".jsonl")
+    return Path(out).parent / "flat" / Path(out).name
+
+
+def cmd_crops(a, items, fails, video_ids, source):
     run_id, started, t0 = f"clo_{datetime.datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:4]}", \
         datetime.datetime.now().isoformat(timespec="seconds"), time.perf_counter()
-    items, fails = build_items(snaps, video_id, a.frames_dir, a.crop_pad, a.min_crop_side, a.min_box_height)
     log(f"{len(items)} crops to send, {len(fails)} not sent")
     d = make_describer(a, "R1", a.variant)
     for n in range(1, a.repeat + 1):
         rows = fails + one_pass(d, items, a.workers)
-        rows.sort(key=lambda r: (r["snapshot_id"], r["person_idx"]))
+        rows.sort(key=lambda r: (r["video_id"], r["snapshot_id"], r["person_idx"]))
         out = Path(a.out) if n == 1 else Path(a.out).with_name(Path(a.out).stem + f"_repeat{n}.jsonl")
         write_jsonl(out, rows)
-        log(f"pass {n}: wrote {out} ({sum(1 for r in rows if r['status'] == 'ok')} ok, "
+        fout = flat_path(a, out)
+        write_jsonl(fout, [flat_row(r, d.method, a.variant) for r in rows])
+        log(f"pass {n}: wrote {out} and {fout} ({sum(1 for r in rows if r['status'] == 'ok')} ok, "
             f"{sum(1 for r in rows if r['status'] != 'ok')} not ok)")
-    append_run(a.out, {"run_id": run_id, "video_id": video_id, "method": d.method, "model": a.model, "mode": "crop",
-                       "prompt_variant": a.variant, "weights": None, "started_at": started,
-                       "duration_sec": round(time.perf_counter() - t0, 2),
-                       "params": {"kind": "clothing_predictions", "api_url": a.api_url, "repeat": a.repeat,
-                                  "workers": a.workers, "disable_thinking": a.disable_thinking, "out": str(a.out),
-                                  **sampling_params(a)}})
+    params = {"kind": "clothing_predictions", "source": source, "api_url": a.api_url, "repeat": a.repeat,
+              "workers": a.workers, "disable_thinking": a.disable_thinking, "out": str(a.out),
+              "out_flat": str(flat_path(a, a.out)), **sampling_params(a)}
+    for run in run_lines(run_id, started, t0, d.method, a.model, "crop", a.variant, video_ids, params):
+        append_run(a.out, run)
 
 
-def cmd_count(a, snaps, video_id):
+def cmd_count(a, frames, video_ids, source):
+    """frames: [{video_id, snapshot_id, frame_path, boxes, _frames_dir, n_boxes|None, box_person_idx|None}]."""
     run_id, started, t0 = f"cnt_{datetime.datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:4]}", \
         datetime.datetime.now().isoformat(timespec="seconds"), time.perf_counter()
     d = make_describer(a, a.mode, "A")
 
     def one(s):
-        base = {"video_id": video_id, "snapshot_id": s["snapshot_id"], "mode": d.mode, "method": d.method, "model": a.model}
-        fp = find_frame(s.get("frame_path", ""), a.frames_dir)
+        base = {"video_id": s["video_id"], "snapshot_id": s["snapshot_id"], "mode": d.mode, "method": d.method,
+                "model": a.model}
+        if s.get("box_person_idx") is not None and a.mode == "R4":
+            base["box_person_idx"] = s["box_person_idx"]
+        fp = find_frame(s.get("frame_path", ""), s["_frames_dir"])
         if fp is None:
             return {**base, "people_count": None, "seconds": None, "status": "error",
                     "error": f"frame not found: {s.get('frame_path')!r}", **NO_ANSWER, "suspicious": False}
         r = d.describe_frame(str(fp), s.get("boxes") or [])
         ok = r["status"] == "ok" and r["people_count"] is not None
         status = "ok" if ok else ("truncated" if r["status"] == "truncated" else "error")
-        n_boxes = sum(1 for b in (s.get("boxes") or []) if (h := box_height(b)) is not None and h >= a.min_box_height)
+        n_boxes = s.get("n_boxes")
+        if n_boxes is None:
+            n_boxes = sum(1 for b in (s.get("boxes") or []) if (h := box_height(b)) is not None and h >= a.min_box_height)
         return {**base, "people_count": r["people_count"] if ok else None, "seconds": r["seconds"], "status": status,
                 "error": r["error"] or (None if ok else "no people_count in the answer"), **answer_fields(r),
                 "suspicious": ok and r["people_count"] == 0 and n_boxes > 0}
     if a.workers > 1:
         with ThreadPoolExecutor(a.workers) as ex:
-            rows = list(ex.map(one, snaps))
+            rows = list(ex.map(one, frames))
     else:
-        rows = [one(s) for s in snaps]
+        rows = [one(s) for s in frames]
     write_jsonl(a.out, rows)
     log(f"wrote {a.out} ({sum(1 for r in rows if r['status'] == 'ok')}/{len(rows)} ok)")
-    append_run(a.out, {"run_id": run_id, "video_id": video_id, "method": d.method, "model": a.model, "mode": d.mode,
-                       "prompt_variant": "A", "weights": None, "started_at": started,
-                       "duration_sec": round(time.perf_counter() - t0, 2),
-                       "params": {"kind": "count_predictions", "api_url": a.api_url, "workers": a.workers,
-                                  "disable_thinking": a.disable_thinking, "min_box_height": a.min_box_height,
-                                  "out": str(a.out), **sampling_params(a)}})
+    params = {"kind": "count_predictions", "source": source, "api_url": a.api_url, "workers": a.workers,
+              "disable_thinking": a.disable_thinking, "min_box_height": a.min_box_height, "out": str(a.out),
+              **sampling_params(a)}
+    for run in run_lines(run_id, started, t0, d.method, a.model, d.mode, "A", video_ids, params):
+        append_run(a.out, run)
 
 
-def main():
+def frames_from_index(a):
+    """frames_index.json (+ kept boxes from --crops-index) -> frame dicts for cmd_count."""
+    files = expand(a.frames_index)
+    kept = {}
+    if a.crops_index:
+        for c in load_crops_index(a.crops_index, a.crops_root):
+            if c.get("kept"):
+                kept.setdefault((c["video_id"], c["snapshot_id"]), []).append(c)
+    frames, seen = [], set()
+    for i, p in enumerate(files):
+        fdir = pick(a.frames_dir, i, len(files), "--frames-dir")
+        rows = read_json(p)
+        if not Path(fdir).is_dir():
+            vids = sorted({fr["video_id"] for fr in rows})
+            log(f"ПРОПУСК {', '.join(vids)} ({p}): нет папки с кадрами {fdir}. {a.mode} для этого видео не запускается; "
+                f"положи кадры (frame_path из индекса, например {rows[0].get('frame_path') if rows else '?'}) и повтори.")
+            continue
+        for fr in rows:
+            key = (fr["video_id"], fr["snapshot_id"])
+            if key in seen:
+                continue
+            seen.add(key)
+            f = {"video_id": fr["video_id"], "snapshot_id": fr["snapshot_id"], "frame_path": fr.get("frame_path", ""),
+                 "_frames_dir": fdir, "boxes": [], "n_boxes": None, "box_person_idx": None}
+            if a.crops_index:
+                cs = sorted(kept.get(key, []), key=lambda c: int(c["person_idx"]))
+                f["boxes"] = [c["box"] for c in cs]
+                f["box_person_idx"] = [int(c["person_idx"]) for c in cs]
+                f["n_boxes"] = sum(1 for c in cs if (c.get("box_h") or box_height(c["box"]) or 0) >= a.min_box_height)
+            else:
+                f["n_boxes"] = fr.get("n_kept")
+            frames.append(f)
+    return frames
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("kind", choices=["crops", "count"])
-    ap.add_argument("--snapshots", required=True)
-    ap.add_argument("--frames-dir", required=True)
+    ap.add_argument("--snapshots", help="old mode: snapshots.json with boxes (cropping done here)")
+    ap.add_argument("--crops-index", nargs="+", help="index mode: crops_index.json of cv/crop_people.py, one per video")
+    ap.add_argument("--crops-root", nargs="+", help="folder with <crop_id>.jpg or full/<crop_id>.jpg, one per index (default: folder of each index)")
+    ap.add_argument("--frames-index", nargs="+", help="count, index mode: frames_index.json, one per video")
+    ap.add_argument("--frames-dir", nargs="+", help="frames folder: one for --snapshots, one per --frames-index file")
     ap.add_argument("--model", required=True, help="= --served-model-name of the running vLLM")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--out-flat", help="crops: Arai's flat format (default <out folder>/flat/<out stem>.jsonl)")
     ap.add_argument("--api-url", default=DEFAULT_URL)
     ap.add_argument("--variant", default="A", choices=["A", "B", "C", "D"], help="crops only")
     ap.add_argument("--mode", default="R2", choices=["R2", "R3", "R4"], help="count only")
@@ -195,17 +375,51 @@ def main():
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--disable-thinking", action="store_true")
     ap.add_argument("--timeout", type=int, default=180)
-    ap.add_argument("--crop-pad", type=float, default=0.12)
+    ap.add_argument("--crop-pad", type=float, default=0.12, help="old mode only (index crops already have it)")
     ap.add_argument("--min-crop-side", type=int, default=336)
     ap.add_argument("--min-box-height", type=float, default=0,
                     help="crops: 0 = send every box (the gold decides what is scored); count: boxes counted for 'suspicious'")
     ap.add_argument("--frequency-penalty", type=float, default=None, help="not sent unless given")
     ap.add_argument("--repetition-penalty", type=float, default=None, help="not sent unless given (vLLM extension)")
     ap.add_argument("--max-tokens", type=int, default=None, help="not sent unless given: replaces the per-mode limit")
-    a = ap.parse_args()
-    data = json.loads(Path(a.snapshots).read_text(encoding="utf-8"))
-    video_id, snaps = data.get("video_id", "unknown_video"), data.get("snapshots", [])
-    (cmd_crops if a.kind == "crops" else cmd_count)(a, snaps, video_id)
+    a = ap.parse_args(argv)
+
+    if a.kind == "crops":
+        if bool(a.snapshots) == bool(a.crops_index):
+            ap.error("crops: give --snapshots (old mode) OR --crops-index (index mode)")
+        if a.snapshots:
+            if not a.frames_dir or len(a.frames_dir) != 1:
+                ap.error("--snapshots needs one --frames-dir")
+            data = read_json(a.snapshots)
+            video_id = data.get("video_id", "unknown_video")
+            items, fails = build_items(data.get("snapshots", []), video_id, a.frames_dir[0], a.crop_pad,
+                                       a.min_crop_side, a.min_box_height)
+            return cmd_crops(a, items, fails, [video_id], "snapshots")
+        entries = load_crops_index(a.crops_index, a.crops_root)
+        if not any(c.get("kept") for c in entries):
+            raise SystemExit("no kept=true crops in --crops-index")
+        items, fails = build_items_index(entries, a.min_crop_side, a.min_box_height)
+        videos = sorted({c["video_id"] for c in entries if c.get("kept")})
+        return cmd_crops(a, items, fails, videos, "crops_index")
+
+    if bool(a.snapshots) == bool(a.frames_index):
+        ap.error("count: give --snapshots (old mode) OR --frames-index (index mode)")
+    if not a.frames_dir:
+        ap.error("count needs --frames-dir")
+    if a.snapshots:
+        if len(a.frames_dir) != 1:
+            ap.error("--snapshots needs one --frames-dir")
+        data = read_json(a.snapshots)
+        video_id = data.get("video_id", "unknown_video")
+        frames = [{"video_id": video_id, "snapshot_id": s["snapshot_id"], "frame_path": s.get("frame_path", ""),
+                   "boxes": s.get("boxes") or [], "_frames_dir": a.frames_dir[0]} for s in data.get("snapshots", [])]
+        return cmd_count(a, frames, [video_id], "snapshots")
+    if a.mode == "R4" and not a.crops_index:
+        ap.error("R4 with --frames-index needs --crops-index (the kept=true boxes go into the prompt)")
+    frames = frames_from_index(a)
+    if not frames:
+        raise SystemExit("нет ни одного видео с папкой кадров: запускать нечего (см. ПРОПУСК выше)")
+    return cmd_count(a, frames, sorted({f["video_id"] for f in frames}), "frames_index")
 
 
 if __name__ == "__main__":

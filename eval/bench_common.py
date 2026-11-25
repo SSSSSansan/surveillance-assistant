@@ -134,21 +134,33 @@ def find_frame(frame_path: str, frames_dir, json_dir):
 
 
 def load_crops_index(path, video_id: str) -> dict:
-    """crops_index.json from Arai -> {(video_id, snapshot_id, person_idx): {"crop_path", "box_h"}}.
-    FORMAT ASSUMED (NOT VERIFIED, the file does not exist yet): a list, or {"crops": [...]}, of objects with
-    snapshot_id, person_idx, crop_path (or path) and optionally box_h / video_id. Relative paths are
-    resolved against the index file's folder."""
+    """crops_index.json of Arai (cv/crop_people.py) -> {(video_id, snapshot_id, person_idx): {"crop_path", "box_h"}}.
+    Format (checked on arai_data/video*/video*_crops_index.json): a list of {crop_id, video_id, snapshot_id,
+    person_idx, box, box_h, kept, reason, path (torso), full_path (whole person), ...}; {"crops": [...]} also accepted.
+    Only kept=true (an entry without "kept" counts as kept) of THIS video_id. The VLM gets the WHOLE person:
+    the first existing of <index folder>/full/<crop_id>.jpg, <index folder>/<crop_id>.jpg, full_path (as is, then
+    against the index folder); the torso `path` / `crop_path` only if none of them exists."""
     p = Path(path)
     data = json.loads(p.read_text(encoding="utf-8"))
     items = data.get("crops", []) if isinstance(data, dict) else data
     out = {}
     for it in items:
-        cp = it.get("crop_path") or it.get("path")
-        if cp is None or "snapshot_id" not in it or "person_idx" not in it:
+        if "snapshot_id" not in it or "person_idx" not in it or it.get("kept") is False:
             continue
-        cp = Path(cp)
-        out[(it.get("video_id", video_id), it["snapshot_id"], int(it["person_idx"]))] = {
-            "crop_path": str(cp if cp.is_absolute() else p.parent / cp), "box_h": it.get("box_h")}
+        vid = it.get("video_id", video_id)
+        if video_id and vid != video_id:  # sn_XXXX repeat in every video: never mix two videos
+            continue
+        cands = []
+        if it.get("crop_id"):
+            cands += [p.parent / "full" / f"{it['crop_id']}.jpg", p.parent / f"{it['crop_id']}.jpg"]
+        for f in (it.get("full_path"), it.get("crop_path"), it.get("path")):
+            if f:
+                f = Path(str(f).replace("\\", "/"))
+                cands += [f, p.parent / f] if not f.is_absolute() else [f]
+        cp = next((c for c in cands if c.is_file()), cands[-1] if cands else None)
+        if cp is None:
+            continue
+        out[(vid, it["snapshot_id"], int(it["person_idx"]))] = {"crop_path": str(cp), "box_h": it.get("box_h")}
     return out
 
 
