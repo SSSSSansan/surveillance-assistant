@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # google/gemma-3-4b-it  (имя для клиента: gemma-3-4b)
-# Использование: bash serve_v4_gemma3_4b.sh [--print] [--gpu-memory-utilization 0.40]
+# Использование: bash serve_v4_gemma3_4b.sh [--print] [--gpu-memory-utilization 0.48]
 #   --print  только показать команду и кэши, ничего не запускать.
 # Перед запуском: bash check_gpu.sh. Одна модель за раз. Вес: около 9 ГБ в bf16 (НЕ ПРОВЕРЕНО)
 # V4: репозиторий закрытый (gated): прими лицензию на сайте Hugging Face и войди САМА: huggingface-cli login
