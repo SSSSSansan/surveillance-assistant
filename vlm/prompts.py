@@ -121,12 +121,17 @@ def load_fewshot(path=None) -> list:
     """Read vlm/fewshot.json -> list of (image_data_url, answer_json_text).
     Format: {"examples": [{"image": "<file path relative to the json OR a data: URL>",
                            "clothing_color": "...", "clothing_type": "...", "description": "..."}]}
+    `path` may also be such a dict itself (run_predictions.py --fewshot-examples builds it with ready data URLs).
+    "color" / "type" are accepted instead of "clothing_color" / "clothing_type".
     Raises ValueError if there are no examples: variant C must never silently run as variant A."""
-    p = Path(path) if path else FEWSHOT_PATH
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        raise ValueError(f"cannot read few-shot file {p}: {e}")
+    if isinstance(path, dict):
+        data, p = path, FEWSHOT_PATH
+    else:
+        p = Path(path) if path else FEWSHOT_PATH
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise ValueError(f"cannot read few-shot file {p}: {e}")
     examples = data.get("examples") if isinstance(data, dict) else None
     if not examples:
         raise ValueError(f"{p} has no examples: fill it with labelled crops before using prompt variant C")
@@ -136,6 +141,7 @@ def load_fewshot(path=None) -> list:
         if not img:
             raise ValueError(f"few-shot example {i}: no 'image'")
         url = img if img.startswith("data:") else _data_url_from_file(p.parent / img)
-        answer = {k: ex.get(k) for k in ("clothing_color", "clothing_type", "description")}
+        answer = {"clothing_color": ex.get("clothing_color") or ex.get("color"),
+                  "clothing_type": ex.get("clothing_type") or ex.get("type"), "description": ex.get("description")}
         out.append((url, json.dumps(answer, ensure_ascii=False)))
     return out

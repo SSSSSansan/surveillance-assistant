@@ -1087,3 +1087,142 @@ def test_summarize_counts_cli_writes_md_and_flags_duplicate_keys(tmp_path):
     assert "ВНИМАНИЕ: в count_m_R4 повторяются ключи" in md
     with pytest.raises(SystemExit, match="ни одной заполненной"):
         SC.build([str(g / "gold_frames_c.csv")], [str(root / "video*/video*_frames_index.json")], [])
+
+
+# ------------------------------------------------- score_methods people / P-C ---
+def _people_gold(path, rows, labeler):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["video_id", "snapshot_id", "person_idx", "color", "type", "visible", "box_h", "labeler"])
+        for (sn, i, color, typ, h) in rows:
+            w.writerow(["v", sn, i, color, typ, "да", h, labeler])
+
+
+def test_score_methods_people_table_buckets_type_exclude_and_agreement(tmp_path):
+    import sys
+    # two labelers; person 3 is a few-shot example (excluded); colors: p0..p2 agree, p4 differs in color
+    a_rows = [("sn_0000", 0, "red", "coat", 60), ("sn_0000", 1, "blue", "jacket", 100),
+              ("sn_0000", 2, "black", "jacket", 200), ("sn_0000", 3, "green", "coat", 300),
+              ("sn_0000", 4, "gray", "coat", 210)]
+    b_rows = [r if r[1] != 4 else ("sn_0000", 4, "white", "coat", 210) for r in a_rows]
+    _people_gold(tmp_path / "gold_people_a.csv", a_rows, "A")
+    _people_gold(tmp_path / "gold_people_b.csv", b_rows, "B")
+    pred = [{"video_id": "v", "snapshot_id": "sn_0000", "person_idx": i, "color": c, "color_2": c2, "type": t,
+             "box_h": h, "sec": 1.0} for i, c, c2, t, h in
+            [(0, "red", None, "coat", 60), (1, "gray", "blue", "coat", 100), (2, "black", None, "jacket", 200),
+             (3, "green", None, "coat", 300), (4, "gray", None, "coat", 210)]]
+    _jl(tmp_path / "m__crop__A.jsonl", pred)
+    (tmp_path / "ex.json").write_text(json.dumps({"examples": [
+        {"video_id": "v", "snapshot_id": "sn_0000", "person_idx": 3, "color": "green", "type": "coat"}]}))
+    r = subprocess.run([sys.executable, "-m", "eval.score_methods", "people", "--gold", str(tmp_path / "gold_people_*.csv"),
+                        "--pred", str(tmp_path / "m__crop__A.jsonl"), "--exclude-file", str(tmp_path / "ex.json"),
+                        "--out-md", str(tmp_path / "o.md")], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr
+    assert "исключено из оценки (--exclude-file): 1 из 1" in r.stdout
+    md = (tmp_path / "o.md").read_text(encoding="utf-8")
+    # p4 is a tie A/B on color -> not scored (conflict); left p0, p1, p2: color 2/3 right, top-2 3/3 (blue is color_2),
+    # type 2/3; buckets: <80 p0 right, 80-150 p1 wrong, >150 p2 right; black 1/3 vs 1/3
+    row = next(x for x in md.splitlines() if x.startswith("| m__crop__A |"))
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    assert cells[1:5] == ["3", "0.667", "0.667", "1.000"]  # macro-F1 over gold labels: (1 + 0 + 1) / 3
+    assert cells[6] == "0.33/0.33" and cells[8] == "0.667"
+    assert cells[11:14] == ["1.000 (n=1)", "0.000 (n=1)", "1.000 (n=1)"]
+    assert "тип: accuracy" in md and "цвет <80px" in md
+    # agreement on the common objects WITHOUT the excluded one: 4 objects, color 3/4, type 4/4
+    assert "| A vs B | color | 4 | 75.0% |" in md and "| A vs B | type | 4 | 100.0% | 1.000 |" in md
+    from eval import metrics
+    k = metrics.cohen_kappa(["red", "blue", "black", "gray"], ["red", "blue", "black", "white"])
+    assert f"| A vs B | color | 4 | 75.0% | {k:.3f} |" in md
+    # one labeler: no agreement section
+    r1 = subprocess.run([sys.executable, "-m", "eval.score_methods", "people", "--gold", str(tmp_path / "gold_people_a.csv"),
+                         "--pred", str(tmp_path / "m__crop__A.jsonl")], cwd=ROOT, capture_output=True, text=True,
+                        encoding="utf-8")
+    assert r1.returncode == 0 and "Согласие разметчиков" not in r1.stdout
+
+
+def test_score_methods_load_exclude_understands_both_fewshot_formats(tmp_path):
+    from eval.score_methods import load_exclude
+    (tmp_path / "a.json").write_text(json.dumps({"examples": [{"video_id": "v", "snapshot_id": "sn_0001", "person_idx": "2"}]}))
+    (tmp_path / "b.json").write_text(json.dumps({"examples": [{"image": "x.jpg", "source": {
+        "video_id": "w", "snapshot_id": "sn_0003", "person_idx": 5}}]}))
+    assert load_exclude([str(tmp_path / "*.json")]) == {("v", "sn_0001", 2), ("w", "sn_0003", 5)}
+    assert load_exclude([]) == set()
+
+
+def test_plot_height_accuracy(tmp_path):
+    from eval import plot_height_accuracy as P
+    gold = {("v", "s", i): {"color": c, "type": "coat", "box_h": h} for i, c, h in
+            [(0, "red", 50), (1, "red", 100), (2, "blue", 100), (3, "red", 200)]}
+    _jl(tmp_path / "pred_clothing_m_R1_A.jsonl", [{"video_id": "v", "snapshot_id": "s", "person_idx": i, "color": "red",
+                                                  "type": "coat", "box_h": h} for i, h in ((0, 50), (1, 100), (2, 100), (3, 200))])
+    _jl(tmp_path / "pred_clothing_m_R1_A_repeat2.jsonl", [])
+    data = P.height_accuracy(gold, [str(tmp_path / "*.jsonl")])
+    assert data == {"pred_clothing_m_R1_A": [("<80", 1.0, 1), ("80-150", 0.5, 2), (">150", 1.0, 1)]}  # repeat2 skipped
+    pytest.importorskip("matplotlib")
+    P.plot(data, tmp_path / "h.png", min_n=1)
+    assert (tmp_path / "h.png").read_bytes()[:4] == b"\x89PNG"
+
+
+def test_runner_fewshot_variant_c_three_examples_before_the_crop(tmp_path):
+    _make_index_project(tmp_path)
+    from PIL import Image
+    Image.new("RGB", (60, 160), (20, 20, 200)).save(tmp_path / "outside.jpg")
+    ex = {"examples": [  # two found through --crops-index by key, one only through crop_path (relative to the json)
+        {"video_id": "vidA", "snapshot_id": "sn_0000", "person_idx": 0, "color": "red", "type": "coat"},
+        {"video_id": "vidA", "snapshot_id": "sn_0000", "person_idx": 2, "color": "green", "type": "jacket",
+         "description": "given"},
+        {"video_id": "zzz", "snapshot_id": "sn_0009", "person_idx": 1, "color": "blue", "type": "hoodie",
+         "crop_path": "outside.jpg"}]}
+    fs = tmp_path / "fewshot_examples.json"
+    fs.write_text(json.dumps(ex))
+    out = tmp_path / "o" / "pred_clothing_f_R1_C.jsonl"
+    base = ["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), "--workers", "1", "--variant", "C",
+            "--out", str(out)]
+    r, reqs = _runner(base + ["--fewshot-examples", str(fs)], _handler)
+    assert r.returncode == 0, r.stderr
+    assert len(reqs) == 2  # the two kept crops of video A
+    for q in reqs:
+        msgs = q["messages"]
+        assert [m["role"] for m in msgs] == ["user", "assistant"] * 3 + ["user"]
+        imgs = [c for m in msgs if isinstance(m["content"], list) for c in m["content"] if c.get("type") == "image_url"]
+        assert len(imgs) == 4 and all(c["image_url"]["url"].startswith("data:image/") for c in imgs)
+        answers = [json.loads(m["content"]) for m in msgs if m["role"] == "assistant"]
+        assert [(x["clothing_color"], x["clothing_type"]) for x in answers] == [
+            ("red", "coat"), ("green", "jacket"), ("blue", "hoodie")]
+        assert answers[0]["description"] == "Person wearing a red coat." and answers[1]["description"] == "given"
+    rows = _lines(out)
+    assert {x["record"]["prompt_variant"] for x in rows if x["record"]} == {"C"}
+    assert {x["prompt_variant"] for x in _lines(tmp_path / "o/flat/pred_clothing_f_R1_C.jsonl")} == {"C"}
+    run = _lines(tmp_path / "o/runs.jsonl")[0]
+    assert run["prompt_variant"] == "C" and run["params"]["fewshot_examples"] == str(fs)
+    assert run["params"]["fewshot_keys"][2] == ["zzz", "sn_0009", 1]
+    # limits and errors: nothing is sent
+    r, reqs = _runner(base + ["--fewshot-examples", str(fs), "--limit-images", "3"], _handler)
+    assert r.returncode != 0 and "--limit-images is 3" in r.stderr and not reqs
+    r, reqs = _runner(["crops", "--crops-index", str(tmp_path / "v1/crops_index.json"), "--variant", "A",
+                       "--fewshot-examples", str(fs), "--out", str(out)], _handler)
+    assert r.returncode != 0 and "--variant C only" in r.stderr and not reqs
+    ex["examples"][2]["crop_path"] = "missing.jpg"
+    fs.write_text(json.dumps(ex))
+    r, reqs = _runner(base + ["--fewshot-examples", str(fs)], _handler)
+    assert r.returncode != 0 and "crop not found" in r.stderr and not reqs
+
+
+def test_real_fewshot_examples_follow_the_selection_rules():
+    fs = ROOT / "eval/gold_real/fewshot_examples.json"
+    gold_csv = ROOT / "eval/gold_real/gold_people_saniya.csv"
+    if not (fs.exists() and gold_csv.exists()):
+        pytest.skip("no eval/gold_real files")
+    ex = json.loads(fs.read_text(encoding="utf-8"))["examples"]
+    gold = {(r["video_id"], r["snapshot_id"], int(r["person_idx"])): r for r in csv.DictReader(gold_csv.open(encoding="utf-8-sig"))}
+    assert len(ex) == 3 and len({e["color"] for e in ex}) == 3 and "black" not in {e["color"] for e in ex}
+    assert len({(e["video_id"], e["snapshot_id"], e["person_idx"]) for e in ex}) == 3
+    for e in ex:
+        g = gold[(e["video_id"], e["snapshot_id"], e["person_idx"])]
+        assert e["video_id"].startswith("2018-03-15") and g["visible"] == "да" and float(g["box_h"]) > 150
+        assert (e["color"], e["type"]) == (g["color"], g["type"]) and e["color"] in base.COLORS and e["type"] in base.TYPES
+    idx = ROOT / "arai_data/video1/video1_crops_index.json"
+    if idx.exists():
+        kept = {(c["video_id"], c["snapshot_id"], int(c["person_idx"])): c["kept"] for c in json.loads(idx.read_text())}
+        assert all(kept[(e["video_id"], e["snapshot_id"], e["person_idx"])] for e in ex)
+        assert all((ROOT / e["crop_path"]).is_file() for e in ex)

@@ -18,6 +18,15 @@ Index mode (Arai's cv/crop_people.py output; one crops_index.json / frames_index
          frame = <frames-dir>/<frame_path>, one --frames-dir per frames index (same order). A video whose frames folder
          does not exist is skipped with a message (ПРОПУСК ...); the run stops only if no video is left.
          R4 needs --crops-index: only kept=true boxes are put in the prompt (box_person_idx in the line).
+Few-shot, prompt variant C (crops only):
+  crops --variant C --fewshot-examples eval/gold_real/fewshot_examples.json [--limit-images 4]
+         the request is: 3 x (example crop + its correct JSON answer as the assistant turn), then the target crop
+         (vlm/describers/vlm_api.py). Examples: list or {"examples": [...]}, each with video_id, snapshot_id,
+         person_idx, color, type (+ crop_path, description). The image is looked up in --crops-index by the key first
+         (works on the server), then crop_path (absolute, or relative to the json / current folder / repo root).
+         Examples are upscaled like the target crops. examples + 1 must fit --limit-images (= LIMIT_IMAGES of the
+         vLLM server, vlm/server/_serve_common.sh: start it with LIMIT_IMAGES=4). The example crops are predicted
+         like all others: drop them from scoring with score_methods --exclude-file.
 Index lines are deduplicated on (video_id, snapshot_id, person_idx) / (video_id, snapshot_id), as eval/run_method.py.
 
 crops line : {"video_id","snapshot_id","person_idx","crop_id","box","box_h","record":{contract}|null,"seconds",
@@ -170,7 +179,46 @@ def flat_row(r, method, variant):
 
 
 def make_describer(a, mode, variant):
-    return VlmApiDescriber(a.model, a.api_url, mode, variant, a.disable_thinking, a.timeout, **sampling_params(a))
+    return VlmApiDescriber(a.model, a.api_url, mode, variant, a.disable_thinking, a.timeout,
+                           fewshot_path=getattr(a, "fewshot", None), **sampling_params(a))
+
+
+def load_fewshot_examples(path, entries, min_side, limit_images):
+    """--fewshot-examples -> ({"examples": [{image: data URL, clothing_color, clothing_type, description}]}, keys).
+    Stops with a message if an example is incomplete, its crop is not found or the image limit is exceeded."""
+    data = read_json(path)
+    items = data.get("examples", []) if isinstance(data, dict) else data
+    if not items:
+        raise SystemExit(f"{path}: no examples")
+    if len(items) + 1 > limit_images:
+        raise SystemExit(f"{path}: {len(items)} examples + the target crop = {len(items) + 1} images per request, "
+                         f"but --limit-images is {limit_images} (vLLM --limit-mm-per-prompt, LIMIT_IMAGES)")
+    by_key = {(c["video_id"], c["snapshot_id"], int(c["person_idx"])): c for c in entries or []}
+    repo = Path(__file__).resolve().parents[1]
+    out, keys = [], []
+    for i, e in enumerate(items):
+        miss = [k for k in ("video_id", "snapshot_id", "person_idx", "color", "type") if e.get(k) in (None, "")]
+        if miss:
+            raise SystemExit(f"{path}: example {i} has no {', '.join(miss)}")
+        key = (e["video_id"], str(e["snapshot_id"]), int(e["person_idx"]))
+        fp = find_crop(by_key[key]) if key in by_key else None
+        if fp is None and e.get("crop_path"):
+            cp = Path(str(e["crop_path"]).replace("\\", "/"))
+            cands = [cp] if cp.is_absolute() else [Path(path).parent / cp, Path.cwd() / cp, repo / cp]
+            fp = next((c for c in cands if c.is_file()), None)
+        if fp is None:
+            raise SystemExit(f"{path}: example {i} {key}: crop not found (not in --crops-index, crop_path "
+                             f"{e.get('crop_path')!r} does not exist)")
+        img = imgutil.load_image(str(fp))
+        w, h = imgutil.image_size(img)
+        url = imgutil.crop_data_url(img, [0, 0, w, h], 0.0, min_side)
+        if url is None:
+            raise SystemExit(f"{path}: example {i}: empty crop file {fp}")
+        out.append({"image": url, "clothing_color": e["color"], "clothing_type": e["type"],
+                    "description": e.get("description") or f"Person wearing a {e['color']} {e['type']}."})
+        keys.append(list(key))
+        log(f"few-shot example {i}: {key} {e['color']} {e['type']} <- {fp}")
+    return {"examples": out}, keys
 
 
 def build_items(snaps, video_id, frames_dir, pad, min_side, min_h):
@@ -280,6 +328,8 @@ def cmd_crops(a, items, fails, video_ids, source):
     params = {"kind": "clothing_predictions", "source": source, "api_url": a.api_url, "repeat": a.repeat,
               "workers": a.workers, "disable_thinking": a.disable_thinking, "out": str(a.out),
               "out_flat": str(flat_path(a, a.out)), **sampling_params(a)}
+    if a.variant == "C":
+        params.update(fewshot_examples=a.fewshot_examples, fewshot_keys=getattr(a, "fewshot_keys", None))
     for run in run_lines(run_id, started, t0, d.method, a.model, "crop", a.variant, video_ids, params):
         append_run(a.out, run)
 
@@ -370,6 +420,11 @@ def main(argv=None):
     ap.add_argument("--out-flat", help="crops: Arai's flat format (default <out folder>/flat/<out stem>.jsonl)")
     ap.add_argument("--api-url", default=DEFAULT_URL)
     ap.add_argument("--variant", default="A", choices=["A", "B", "C", "D"], help="crops only")
+    ap.add_argument("--fewshot-examples", help="crops, --variant C: json with the few-shot examples "
+                                                "(eval/gold_real/fewshot_examples.json)")
+    ap.add_argument("--limit-images", type=int, default=4,
+                    help="images allowed per request by the server (LIMIT_IMAGES / --limit-mm-per-prompt); "
+                         "variant C needs examples + 1")
     ap.add_argument("--mode", default="R2", choices=["R2", "R3", "R4"], help="count only")
     ap.add_argument("--repeat", type=int, default=1, help="crops only: 2 = second pass for repeatability")
     ap.add_argument("--workers", type=int, default=2)
@@ -384,9 +439,15 @@ def main(argv=None):
     ap.add_argument("--max-tokens", type=int, default=None, help="not sent unless given: replaces the per-mode limit")
     a = ap.parse_args(argv)
 
+    if a.fewshot_examples and (a.kind != "crops" or a.variant != "C"):
+        ap.error("--fewshot-examples is for crops --variant C only")
     if a.kind == "crops":
         if bool(a.snapshots) == bool(a.crops_index):
             ap.error("crops: give --snapshots (old mode) OR --crops-index (index mode)")
+        if a.variant == "C" and a.fewshot_examples:
+            entries_fs = load_crops_index(a.crops_index, a.crops_root) if a.crops_index else []
+            a.fewshot, a.fewshot_keys = load_fewshot_examples(a.fewshot_examples, entries_fs, a.min_crop_side,
+                                                              a.limit_images)
         if a.snapshots:
             if not a.frames_dir or len(a.frames_dir) != 1:
                 ap.error("--snapshots needs one --frames-dir")
