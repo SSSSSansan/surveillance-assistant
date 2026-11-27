@@ -12,3 +12,27 @@ venv/
 .venv/
 clips/
 runs/
+# --- архивы (клипы, кадры, выгрузки результатов) ---
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# --- данные датасета MEVA: кадры, кропы, клипы (только локально) ---
+arai_data/
+frames/
+crops/
+annotated_check/
+/snapshots.json
+vlm/events_with_vlm_A.json
+
+# --- временные и локальные копии ---
+_e2e_tmp/
+arai_results/
+.pytest_cache/
+
+# --- сырые результаты серверных прогонов ---
+# server_runs/ — старые прогоны 24-25.11 (заменены набором server_runs2)
+server_runs/
+# логи vLLM и раннера: большие, с путями сервера; цифры из них перенесены в docs/stage3_vlm_results.md
+server_runs2/*.log
