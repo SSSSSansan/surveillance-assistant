@@ -70,6 +70,16 @@ class BoomConn:
 r = tool_schemas.call_tool("count_events", {}, BoomConn())
 check("внутренняя ошибка не выдаёт подробностей (пароль, хост)",
       r["ok"] is False and "RuntimeError" in r["error"] and "secret" not in r["error"] and "db.internal" not in r["error"], r)
+import os, logging, io
+buf = io.StringIO(); h = logging.StreamHandler(buf); lg = logging.getLogger("agent.tools"); lg.addHandler(h)
+tool_schemas.call_tool("count_events", {}, BoomConn())
+lg.removeHandler(h)
+check("полный текст ошибки пишется в консоль (лог), чтобы можно было найти причину",
+      "functions" not in buf.getvalue() and "RuntimeError" in buf.getvalue() and "db.internal" in buf.getvalue(), buf.getvalue()[:200])
+os.environ["AGENT_DEBUG"] = "1"
+r = tool_schemas.call_tool("count_events", {}, BoomConn())
+os.environ.pop("AGENT_DEBUG")
+check("AGENT_DEBUG=1: в ответе есть текст ошибки (только для отладки)", "db.internal" in r["error"], r)
 check("search_descriptions получает embedder",
       tool_schemas.call_tool("search_descriptions", {"query": "desk", "mode": "semantic"}, conn,
                              embedder=__import__("database.embeddings", fromlist=["x"]).HashingEmbedder())["ok"] is True)

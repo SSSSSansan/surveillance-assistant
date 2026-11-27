@@ -1,4 +1,3 @@
-
 """Схемы инструментов для модели и безопасный вызов функций из agent/tools.py.
 
 Модели отдаются только девять обычных функций (шесть по событиям и три по срезам, этап 2). Отладочные debug_*,
@@ -7,6 +6,8 @@
 """
 
 import json
+import logging
+import os
 
 from agent import snapshot_tools, tools
 
@@ -316,10 +317,10 @@ def call_tool(name, arguments, conn=None, embedder=None):
         return result
 
     except Exception as e:
-        return {
-            "ok": False,
-            "error": (
-                f"внутренняя ошибка функции "
-                f"{name} ({type(e).__name__})"
-            )
-        }
+        # Полный текст ошибки (с хостом и паролем из psycopg2) в ответ модели и в чат не отдаём: он только в
+        # консоли, где запущено приложение. Для отладки AGENT_DEBUG=1 добавляет первые 300 символов текста.
+        logging.getLogger("agent.tools").exception("функция %s упала", name)
+        msg = f"внутренняя ошибка функции {name} ({type(e).__name__})"
+        if os.environ.get("AGENT_DEBUG") == "1":
+            msg += f": {str(e)[:300]}"
+        return {"ok": False, "error": msg}

@@ -7,6 +7,7 @@ Settings (model URL, database, clips folder) are in the collapsed «Connection s
 Every question is handled separately: earlier chat messages are not sent to the model.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -128,6 +129,11 @@ with messages:
 with input_slot:
     prompt = st.chat_input("Ask about events, people or clothing...")
 question = ((prompt or "").strip() or pending or "").strip()
+if question and settings.db_mode != ui_theme.DEMO and not os.environ.get("DATABASE_URL"):
+    # Без базы каждая функция падает, а слабая модель отвечает «нет»: честнее не отвечать вовсе.
+    st.error("PostgreSQL is selected in Connection settings, but DATABASE_URL is not set, so the question was not "
+             "answered. Set DATABASE_URL and restart the app, or switch to the demo database.")
+    st.stop()
 if question:
     history.append({"role": "user", "content": question})
     client = OpenAICompatClient(base_url=settings.base_url, model=settings.model)
