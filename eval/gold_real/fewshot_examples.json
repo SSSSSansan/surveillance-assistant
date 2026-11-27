@@ -1,0 +1,38 @@
+{
+ "_comment": "Few-shot examples for prompt variant C (vlm/run_predictions.py crops --variant C --fewshot-examples). Chosen from eval/gold_real/gold_people_saniya.csv: video1 (2018-03-15...), box_h > 150, visible=да, kept=true, three different colors, none black, and no near-copy of the same person (IoU > 0.3, same gold color) on other snapshots of video1. color/type = Saniya's labels; description is a template made from them (the gold has no description). crop_path is relative to the repo root; on the server the crop is found through --crops-index by (video_id, snapshot_id, person_idx). Score with: python3 -m eval.score_methods people ... --exclude-file eval/gold_real/fewshot_examples.json",
+ "examples": [
+  {
+   "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
+   "snapshot_id": "sn_0004",
+   "person_idx": 14,
+   "crop_id": "sn_0004_p14",
+   "crop_path": "arai_data/video1/sn_0004_p14.jpg",
+   "color": "blue",
+   "type": "jacket",
+   "box_h": 582.5,
+   "description": "Person wearing a blue jacket."
+  },
+  {
+   "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
+   "snapshot_id": "sn_0004",
+   "person_idx": 10,
+   "crop_id": "sn_0004_p10",
+   "crop_path": "arai_data/video1/sn_0004_p10.jpg",
+   "color": "red",
+   "type": "jacket",
+   "box_h": 559.8,
+   "description": "Person wearing a red jacket."
+  },
+  {
+   "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
+   "snapshot_id": "sn_0000",
+   "person_idx": 12,
+   "crop_id": "sn_0000_p12",
+   "crop_path": "arai_data/video1/sn_0000_p12.jpg",
+   "color": "gray",
+   "type": "t-shirt",
+   "box_h": 414.5,
+   "description": "Person wearing a gray t-shirt."
+  }
+ ]
+}

@@ -1,0 +1,4 @@
+{
+  "_comment": "Examples for prompt variant C. Fill with 3 labelled crops (NOT from the test set!). image = path relative to this file, or a data: URL. Empty on purpose: variant C refuses to run until this is filled.",
+  "examples": []
+}
