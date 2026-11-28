@@ -11,7 +11,12 @@
 Одежда:
     python -m eval.score_methods people --gold gold_people.csv \
         --pred results/hist__crop__A.jsonl results/siglip__crop__A.jsonl results/par__crop__A.jsonl \
-        --out-md results/clothing.md --out-dir results/confusion
+        --out-md results/clothing.md --out-dir results/confusion [--exclude-file eval/gold_real/fewshot_examples.json]
+    Таблица: accuracy / macro-F1 цвета и типа, top-2 цвета, доля unknown, доля black (модель / эталон), сек на кроп,
+    accuracy цвета по высоте кропа box_h (<80 / 80-150 / >150 px). Если в эталоне 2+ разметчика (несколько CSV или
+    колонка labeler), ниже идёт их согласие попарно: % совпадений и каппа Коэна по color и type.
+    --exclude-file: json с кропами, которые не оцениваются ни у одного метода (few-shot примеры варианта C):
+    список или {"examples": [...]}, у каждого video_id, snapshot_id, person_idx (или вложенный "source" с ними).
 
 Счёт людей (T33):
     python -m eval.score_methods count --gold gold_frames.csv \
@@ -78,6 +83,36 @@ def load_gold_people(path, skip_visible=("не видно", "not_visible")):
         if col:
             gold[k] = {"color": col, "type": typ, "box_h": rs[0].get("box_h")}
     return gold, conflicts, len(groups)
+
+
+def load_exclude(paths):
+    """--exclude-file -> set of (video_id, snapshot_id, person_idx). Understands eval/gold_real/fewshot_examples.json
+    (flat keys) and vlm/fewshot.json (keys inside "source")."""
+    out = set()
+    for one in _expand(paths or []):
+        d = json.loads(Path(one).read_text(encoding="utf-8"))
+        items = d.get("examples", []) if isinstance(d, dict) else d
+        for e in items:
+            s = e.get("source") if isinstance(e.get("source"), dict) else e
+            out.add((s["video_id"], str(s["snapshot_id"]).strip(), int(s["person_idx"])))
+    return out
+
+
+def labeler_agreement(path, exclude=frozenset(), fields=("color", "type")):
+    """Согласие разметчиков попарно (общие объекты пары): [{pair, field, n, agree, kappa}]. [] если разметчик один."""
+    from eval.agreement import pairwise  # % совпадений + eval.metrics.cohen_kappa, та же функция, что в eval.agreement
+    rows = []
+    for one in _expand(path):
+        with open(one, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                r = {**r, "color": r.get("color") or r.get("clothing_color"),
+                     "type": r.get("type") or r.get("clothing_type"),
+                     "labeler": r.get("labeler") or Path(one).stem, "snapshot_id": str(r["snapshot_id"]).strip()}
+                if r["color"] and (r["video_id"], r["snapshot_id"], int(r["person_idx"])) not in exclude:
+                    rows.append(r)
+    if len({r["labeler"] for r in rows}) < 2:
+        return []
+    return [x for x in pairwise(rows, fields) if x["n"]]
 
 
 def load_preds(path):
@@ -148,12 +183,25 @@ def confusion_csv(pairs, field, path):
             w.writerow([a] + [cnt.get((a, b), 0) for b in labels])
 
 
+def _bucket_cells(pairs):
+    cells = []
+    for bn, _, _ in BUCKETS:
+        sub = [(g, p) for g, p in pairs if bucket(p.get("box_h")) == bn]
+        cells.append(f"{sum(g['color'] == p['color'] for g, p in sub) / len(sub):.3f} (n={len(sub)})" if sub else "-")
+    return cells
+
+
 def cmd_people(a):
     gold, conflicts, n_obj = load_gold_people(a.gold)
+    exclude = load_exclude(a.exclude_file)
+    if exclude:
+        before = len(gold)
+        gold = {k: v for k, v in gold.items() if k not in exclude}
+        print(f"исключено из оценки (--exclude-file): {before - len(gold)} из {len(exclude)} кропов")
     print(f"эталон: объектов {n_obj}, годных {len(gold)}, конфликтов разметчиков {conflicts}\n")
-    lines = ["| метод | n | accuracy | macro-F1 | top-2 | unknown | black pred/gold | сек/кроп |",
-             "|---|---|---|---|---|---|---|---|"]
-    detail = []
+    lines = ["| метод | n | accuracy | macro-F1 | top-2 | unknown | black pred/gold | сек/кроп | "
+             "тип: accuracy | тип: macro-F1 | тип: unknown | цвет <80px | цвет 80-150px | цвет >150px |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for pat in a.pred:
         for pth in glob.glob(pat):
             preds = load_preds(pth)
@@ -165,23 +213,23 @@ def cmd_people(a):
             m = score_field(pairs, "color")
             secs = [p["sec"] for _, p in pairs if p.get("sec") is not None]
             sec = sum(secs) / len(secs) if secs else float("nan")
+            t = score_field(pairs, "type")
+            tcells = [f"{t['accuracy']:.3f}", f"{t['macro_f1']:.3f}", f"{t['unknown_share']:.3f}"] if t else ["-"] * 3
             lines.append(f"| {name} | {m['n']} | {m['accuracy']:.3f} | {m['macro_f1']:.3f} | "
                          f"{m['top2']:.3f} | {m['unknown_share']:.3f} | "
-                         f"{m['black_pred']:.2f}/{m['black_gold']:.2f} | {sec:.4f} |")
-            # по высоте кропа
-            rows = []
-            for bn, lo, hi in BUCKETS:
-                sub = [(g, p) for g, p in pairs if bucket(p.get("box_h")) == bn]
-                if sub:
-                    rows.append(f"{bn}px: {sum(g['color'] == p['color'] for g, p in sub) / len(sub):.3f} (n={len(sub)})")
-            detail.append(f"- **{name}** точность цвета по высоте: " + "; ".join(rows))
-            t = score_field(pairs, "type")
-            if t:
-                detail.append(f"- **{name}** тип: accuracy {t['accuracy']:.3f}, macro-F1 {t['macro_f1']:.3f}, n={t['n']}")
+                         f"{m['black_pred']:.2f}/{m['black_gold']:.2f} | {sec:.4f} | "
+                         + " | ".join(tcells + _bucket_cells(pairs)) + " |")
             if a.out_dir:
                 Path(a.out_dir).mkdir(parents=True, exist_ok=True)
                 confusion_csv(pairs, "color", Path(a.out_dir) / f"{name}_color.csv")
-    md = "## Одежда: цвет\n\n" + "\n".join(lines) + "\n\n### Детали\n" + "\n".join(detail) + "\n"
+    md = ("## Одежда: цвет и тип\n\n" + "\n".join(lines) + "\n\n"
+          "accuracy / macro-F1 / top-2 / unknown / black без пометки - по цвету. Тип \"-\": метод не даёт тип "
+          "(все unknown). Цвет по высоте кропа box_h: accuracy цвета (n кропов в бакете).\n")
+    agr = labeler_agreement(a.gold, exclude)
+    if agr:
+        md += ("\n### Согласие разметчиков (общие объекты пары)\n\n| пара | поле | n | совпадений | каппа Коэна |\n"
+               "|---|---|---|---|---|\n" + "\n".join(f"| {x['pair']} | {x['field']} | {x['n']} | {x['agree']:.1%} | "
+                                                       f"{x['kappa']:.3f} |" for x in agr) + "\n")
     print(md)
     if a.out_md:
         Path(a.out_md).write_text(md, encoding="utf-8")
@@ -274,6 +322,8 @@ def main():
     p.add_argument("--pred", nargs="+", required=True)
     p.add_argument("--out-md")
     p.add_argument("--out-dir")
+    p.add_argument("--exclude-file", nargs="*", default=[],
+                   help="json с кропами (video_id, snapshot_id, person_idx), которые не оцениваются: few-shot примеры")
     c = sub.add_parser("count")
     c.add_argument("--gold", required=True, nargs="+")
     c.add_argument("--frames-index", nargs="+", required=True)

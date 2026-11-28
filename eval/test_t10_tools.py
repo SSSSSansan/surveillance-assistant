@@ -106,7 +106,9 @@ check("неизвестная камера -> пусто, не ошибка",
 raw.execute("INSERT INTO zones VALUES ('cam_without_video','z1','Zone')")
 check("камера, у которой есть только зоны, тоже в списке",
       "cam_without_video" in [c["camera_id"] for c in tools.list_zones_cameras(conn=conn)["cameras"]])
-check("пустая строка camera_id -> ошибка", tools.list_zones_cameras(camera_id="", conn=conn)["ok"] is False)
+check("пустая строка camera_id = не задано (все камеры)", tools.list_zones_cameras(camera_id="", conn=conn)
+      == tools.list_zones_cameras(conn=conn) and tools.list_zones_cameras(camera_id="", conn=conn)["ok"] is True)
+check("camera_id не строка -> ошибка", tools.list_zones_cameras(camera_id=5, conn=conn)["ok"] is False)
 raw.execute("DELETE FROM zones WHERE camera_id='cam_without_video'")
 raw.execute("DELETE FROM events WHERE video_id='test_video_02'")
 raw.execute("DELETE FROM videos WHERE video_id='test_video_02'")

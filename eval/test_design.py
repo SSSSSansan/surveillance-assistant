@@ -341,6 +341,26 @@ with fake_llm.FakeOpenAIServer(fake_llm.OracleClient(ROWS)) as srv, tempfile.Tem
     check("чат: весь видимый текст интерфейса на английском (нет кириллицы)", ui_text and not re.search(r"[а-яёА-ЯЁ]", " ".join(ui_text)),
           [t for t in ui_text if re.search(r"[а-яёА-ЯЁ]", t)])
 
+    sess_pg = SS()
+    st_pg = make_st(); st_pg.session_state = sess_pg
+    st_pg.texts = {"cfg_base_url": srv.url, "cfg_model": "oracle", "cfg_clips": d}
+    st_pg.choices = {"cfg_db": ui_theme.PG}
+    st_pg.roles = []
+    st_pg.chat_message.side_effect = lambda role: (st_pg.roles.append(role), mock.MagicMock())[1]
+    st_pg.chat_input.return_value = "Сколько раз кто-то входил?"
+    class _Stop(Exception): pass
+    st_pg.stop.side_effect = _Stop
+    n_req = len(srv.requests)
+    with mock.patch.dict(sys.modules, {"streamlit": st_pg}), mock.patch.dict(os.environ):
+        os.environ.pop("DATABASE_URL", None)
+        try:
+            runpy.run_path(APP, run_name="__main__")
+        except _Stop:
+            pass
+    check("чат: PostgreSQL без DATABASE_URL -> ошибка и остановка, модель не вызывается, вопрос не попал в историю",
+          st_pg.error.called and "DATABASE_URL" in st_pg.error.call_args.args[0] and len(srv.requests) == n_req
+          and sess_pg.get("chat", []) == [], st_pg.error.call_args)
+
     st = run_chat(sess, srv.url, d, prompt="Сколько раз кто-то входил?")
     check("чат: вопрос и ответ попали в историю", [m["role"] for m in sess["chat"]] == ["user", "assistant"]
           and sess["chat"][1]["content"] == "Найдено событий: 4 (event_type=enter).", sess["chat"])

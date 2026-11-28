@@ -66,10 +66,14 @@ class ToolInputError(ValueError):
 # ---------- проверка аргументов ----------
 
 def _str(name, value, *, lower=False, upper=False):
+    """None и пустая строка (в т. ч. из одних пробелов) = «не задано» (слабые модели, например qwen2.5:7b,
+    присылают "" вместо отсутствующего аргумента). Любой не строковый тип по-прежнему ошибка."""
     if value is None:
         return None
-    if not isinstance(value, str) or not value.strip():
-        raise ToolInputError(f"{name}: нужна непустая строка, получено {value!r}")
+    if not isinstance(value, str):
+        raise ToolInputError(f"{name}: нужна строка, получено {value!r}")
+    if not value.strip():
+        return None
     value = value.strip()
     if lower:
         return value.lower()
@@ -79,8 +83,8 @@ def _str(name, value, *, lower=False, upper=False):
 
 
 def _number(name, value, *, minimum=None):
-    if value is None:
-        return None
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None     # "" = «не задано», как и в _str
     if isinstance(value, bool):
         raise ToolInputError(f"{name}: нужно число, получено {value!r}")
     try:
@@ -110,8 +114,9 @@ def _resolve_vlm_variant(video_id, vlm_variant, conn=None, model=None):
     the variant with the most confirmed descriptions; when model is supplied,
     prefer variants whose descriptions have current embeddings for that model.
     """
+    vlm_variant = _str("vlm_variant", vlm_variant, upper=True)
     if vlm_variant is not None:
-        return _str("vlm_variant", vlm_variant, upper=True)
+        return vlm_variant
     if not video_id:
         return DEFAULT_VLM_VARIANT
 
@@ -161,8 +166,7 @@ def _prepare(view, video_id, camera_id, event_type, zone_id, track_id,
     track_id = _integer("track_id", track_id, minimum=0)
     t_from = _number("t_from", t_from, minimum=0)
     t_to = _number("t_to", t_to, minimum=0)
-    variant = _str("vlm_variant", vlm_variant if vlm_variant is not None
-                   else DEFAULT_VLM_VARIANT, upper=True)
+    variant = _str("vlm_variant", vlm_variant, upper=True) or DEFAULT_VLM_VARIANT
 
     if variant not in VLM_VARIANTS:
         raise ToolInputError(f"vlm_variant: допустимо A или B, получено {variant!r}")
@@ -414,7 +418,7 @@ def search_descriptions(query=None, mode="semantic", top_k=5, video_id=None, cam
     try:
         if not isinstance(query, str) or not query.strip():
             raise ToolInputError("query: нужна непустая строка")
-        mode = _str("mode", mode, lower=True)
+        mode = _str("mode", mode, lower=True) or "semantic"
         if mode not in SEARCH_MODES:
             raise ToolInputError(f"mode: допустимо {', '.join(SEARCH_MODES)}, получено {mode!r}")
         top_k = _integer("top_k", top_k, minimum=1)

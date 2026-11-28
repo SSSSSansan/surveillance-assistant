@@ -201,12 +201,19 @@ check("после seed: видео 1, зон 4, событий 19, резуль�
 print("== кривые аргументы ==")
 raw, conn = fresh()
 bad_kwargs = [dict(event_type="fly"), dict(track_id="abc"), dict(track_id=7.5), dict(t_from=-1),
-              dict(t_from=50, t_to=10), dict(t_from=float("nan")), dict(zone_id=""),
-              dict(camera_id=""), dict(vlm_variant="C"), dict(track_id=True)]
+              dict(t_from=50, t_to=10), dict(t_from=float("nan")), dict(zone_id=5),
+              dict(camera_id=["cam1"]), dict(vlm_variant="C"), dict(track_id=True)]
 for kw in bad_kwargs:
     r1 = tools.query_events(conn=conn, **kw)
     r2 = tools.count_events(conn=conn, **{k: v for k, v in kw.items()})
     check(f"{kw}", r1["ok"] is False and r2["ok"] is False and bool(r1["error"]))
+# qwen2.5:7b шлёт "" вместо отсутствующего аргумента: это «не задано», а не ошибка
+base_q, base_c = tools.query_events(conn=conn), tools.count_events(conn=conn)
+for kw in [dict(camera_id=""), dict(zone_id=""), dict(event_type=""), dict(video_id=""), dict(vlm_variant=""),
+           dict(camera_id="  ", zone_id=" "), dict(t_from="", t_to=""), dict(track_id="")]:
+    r1, r2 = tools.query_events(conn=conn, **kw), tools.count_events(conn=conn, **kw)
+    check(f"пустая строка = не задано: {kw}", r1["ok"] is True and r2["ok"] is True
+          and r1["count"] == base_q["count"] and r2["count"] == base_c["count"], (r1.get("error"), r2.get("error")))
 for kw in [dict(limit=0), dict(order="sideways")]:
     check(f"query_events {kw}", tools.query_events(conn=conn, **kw)["ok"] is False)
 check("debug: неизвестный view", tools.debug_query_events(view="everything", conn=conn)["ok"] is False)
