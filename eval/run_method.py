@@ -9,6 +9,7 @@ snapshots_vlm.json: результат лежит рядом, отдельным
 Выход:
     results/<method>__crop__<variant>.jsonl      строка на человека: контракт + video_id, snapshot_id, person_idx, сек
     results/<method>__crop__<variant>.runs.json  по записи на видео (метод, веса, параметры, секунды): для таблицы runs
+    results/<method>__crop__<variant>.runs.jsonl то же, по строке на запись (формат runs.jsonl у Сании)
 
 Ключ строки совпадает с ключом базы и snapshots_vlm.json: (video_id, snapshot_id, person_idx).
 
@@ -104,7 +105,9 @@ def main():
             ans["prompt_variant"] = a.variant
             rows.append({"video_id": c["video_id"], "snapshot_id": c["snapshot_id"],
                          "person_idx": c["person_idx"], "crop_id": c["crop_id"],
-                         "box_h": c["box_h"], "box": c["box"], "sec": round(dt / len(chunk), 5), **ans})
+                         "box_h": c["box_h"], "box": c["box"], "sec": round(dt / len(chunk), 5), **ans,
+                         # поля как в прогонах VLM (eval у Сании фильтрует по status): для не-LLM методов всегда ok
+                         "status": "ok", "finish_reason": None, "error": None, "raw_response": None})
             per_video[c["video_id"]]["sec"] += dt / len(chunk)
             per_video[c["video_id"]]["n"] += 1
         if (i // a.batch) % 5 == 0:
@@ -125,6 +128,9 @@ def main():
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     (out / f"{stem}.runs.json").write_text(json.dumps(runs, ensure_ascii=False, indent=1), encoding="utf-8")
+    with open(out / f"{stem}.runs.jsonl", "w", encoding="utf-8") as f:  # тот же формат, что runs.jsonl у Сании
+        for r in runs:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
     mean = sum(r["sec"] for r in rows) / len(rows)
     print(f"готово: {(out / (stem + '.jsonl')).as_posix()}  ({len(rows)} строк, {mean * 1000:.1f} мс на кроп)")
 

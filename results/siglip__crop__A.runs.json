@@ -1,14 +1,14 @@
 [
  {
-  "run_id": "siglip-A-d12467",
+  "run_id": "siglip-A-d47e44",
   "video_id": "2018-03-15.15-00-00.15-05-00.school.G421.r13",
   "method": "cv:siglip",
   "model": "google/siglip-base-patch16-224",
   "mode": "crop",
   "prompt_variant": "A",
   "weights": "google/siglip-base-patch16-224",
-  "started_at": "2026-11-24T13:03:31.630093+00:00",
-  "duration_sec": 5.718,
+  "started_at": "2026-11-28T04:52:59.650568+00:00",
+  "duration_sec": 8.901,
   "params": {
    "model_id": "google/siglip-base-patch16-224",
    "device": "cuda",
@@ -17,15 +17,15 @@
   }
  },
  {
-  "run_id": "siglip-A-b37a80",
+  "run_id": "siglip-A-b339b1",
   "video_id": "2018-03-07.17-35-00.17-40-00.school.G421.r13",
   "method": "cv:siglip",
   "model": "google/siglip-base-patch16-224",
   "mode": "crop",
   "prompt_variant": "A",
   "weights": "google/siglip-base-patch16-224",
-  "started_at": "2026-11-24T13:03:31.630093+00:00",
-  "duration_sec": 4.992,
+  "started_at": "2026-11-28T04:52:59.650568+00:00",
+  "duration_sec": 7.819,
   "params": {
    "model_id": "google/siglip-base-patch16-224",
    "device": "cuda",
